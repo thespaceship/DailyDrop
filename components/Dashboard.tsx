@@ -72,13 +72,19 @@ export default function Dashboard() {
   })
 
   useEffect(() => {
-    const saved = localStorage.getItem('dailydrop_settings')
-    if (saved) {
-      const s = JSON.parse(saved)
-      setVoiceStyle(s.voiceStyle || 'podcast')
-      setHostName(s.hostName || '')
-      setLength(s.length || 'medium')
-      setVoiceId(s.voiceId || '21m00Tcm4TlvDq8ikWAM')
+    const params = new URLSearchParams(window.location.search)
+    const gmailStatus = params.get('gmail')
+    if (gmailStatus === 'connected') {
+      fetchRealEmails()
+      window.history.replaceState({}, '', window.location.pathname)
+    } else if (gmailStatus === 'error') {
+      setErrorMsg('Gmail connection failed. Please try again.')
+      window.history.replaceState({}, '', window.location.pathname)
+    }
+
+    const gmailConnected = localStorage.getItem('gmail_connected')
+    if (gmailConnected === 'true') {
+      fetchRealEmails()
     }
   }, [])
 
@@ -172,13 +178,29 @@ export default function Dashboard() {
     setVideos(prev => prev.filter(v => v.url !== url))
   }
 
-  function connectDemoEmails() {
-    setEmails([
-      { sender: 'Morning Brew', subject: 'The Fed blinked — what it means for markets', snippet: 'The Federal Reserve held rates steady yesterday but signaled two cuts before year end, sending stocks to a three-month high.', time: '6:02 AM' },
-      { sender: 'TLDR Newsletter', subject: 'OpenAI releases o3-mini, Figma ships AI tools', snippet: 'OpenAI released o3-mini to all Plus users this week, while Figma announced a suite of AI design tools that auto-generate components from prompts.', time: '6:15 AM' },
-      { sender: 'The Hustle', subject: 'Why Duolingo just cut 10% of its workforce', snippet: 'Duolingo laid off roughly 10 percent of its contractor workforce this week, citing AI automation as the reason it no longer needs as many human translators.', time: '7:44 AM' },
-    ])
-    setEmailConnected(true)
+  function connectGmail() {
+    window.location.href = '/api/auth'
+  }
+
+  async function fetchRealEmails() {
+    try {
+      const res = await fetch('/api/emails')
+      const data = await res.json()
+      if (data.emails && data.emails.length > 0) {
+        setEmails(data.emails)
+        setEmailConnected(true)
+        localStorage.setItem('gmail_connected', 'true')
+      } else if (data.error === 'Not connected') {
+        localStorage.removeItem('gmail_connected')
+        setEmailConnected(false)
+      } else {
+        setEmails([])
+        setEmailConnected(true)
+        localStorage.setItem('gmail_connected', 'true')
+      }
+    } catch {
+      localStorage.removeItem('gmail_connected')
+    }
   }
 
   async function generate() {
@@ -299,7 +321,7 @@ export default function Dashboard() {
               {!emailConnected ? (
                 <div className={styles.connectBox}>
                   <p className={styles.connectText}>Connect your newsletter inbox to pull today's emails automatically.</p>
-                  <button className={styles.connectBtn} onClick={connectDemoEmails}>Connect Gmail (demo)</button>
+                  <button className={styles.connectBtn} onClick={connectGmail}>Connect Gmail</button>
                   <p className={styles.connectNote}>Real Gmail: see README for setup steps</p>
                 </div>
               ) : (
