@@ -15,67 +15,25 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Could not parse YouTube URL' }, { status: 400 })
     }
 
-    // Use youtubei.js to fetch captions and video info
-    const { Innertube } = await import('youtubei.js')
-    const youtube = await Innertube.create({ retrieve_player: false })
+    const res = await fetch(`https://api.supadata.ai/v1/youtube/transcript?videoId=${videoId}&text=true`, {
+      headers: {
+        'x-api-key': process.env.SUPADATA_API_KEY!,
+      },
+    })
 
-    // Try captions first
-    try {
-      const info = await youtube.getInfo(videoId)
-      const transcriptData = await info.getTranscript()
-      const segments = transcriptData?.transcript?.content?.body?.initial_segments || []
-      const text = segments
-        .map((s: any) => s.snippet?.text || '')
-        .join(' ')
-        .trim()
-
-      if (text.length > 100) {
-        return NextResponse.json({ transcript: text.slice(0, 8000), videoId, method: 'captions' })
-      }
-    } catch {
-      // no captions, fall through
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}))
+      return NextResponse.json({ transcript: null, error: err.message || 'Transcript not available' })
     }
 
-    // No captions — use Whisper on the audio stream
-    try {
-      const { Innertube: Innertube2 } = await import('youtubei.js')
-      const yt2 = await Innertube2.create()
-      const info = await yt2.getInfo(videoId)
-      const format = info.chooseFormat({ type: 'audio', quality: 'best' })
-      const streamUrl = await format?.decipher(yt2.session.player)
+    const data = await res.json()
+    const text = data.content || data.transcript || ''
 
-      if (streamUrl) {
-        const audioRes = await fetch(streamUrl, {
-          headers: { 'User-Agent': 'Mozilla/5.0' },
-          signal: AbortSignal.timeout(30000)
-        })
-
-        if (audioRes.ok) {
-          const audioBuffer = await audioRes.arrayBuffer()
-          const audioBlob = new Blob([audioBuffer], { type: 'audio/webm' })
-
-          const formData = new FormData()
-          formData.append('file', audioBlob, 'audio.webm')
-          formData.append('model', 'whisper-1')
-          formData.append('response_format', 'text')
-
-          const whisperRes = await fetch('https://api.openai.com/v1/audio/transcriptions', {
-            method: 'POST',
-            headers: { 'Authorization': `Bearer ${process.env.OPENAI_API_KEY}` },
-            body: formData,
-          })
-
-          if (whisperRes.ok) {
-            const transcriptText = await whisperRes.text()
-            return NextResponse.json({ transcript: transcriptText.slice(0, 8000), videoId, method: 'whisper' })
-          }
-        }
-      }
-    } catch (e) {
-      console.error('Whisper fallback error:', e)
+    if (!text || text.length < 50) {
+      return NextResponse.json({ transcript: null, error: 'No transcript found for this video' })
     }
 
-    return NextResponse.json({ transcript: null, error: 'Could not transcribe this video' })
+    return NextResponse.json({ transcript: text.slice(0, 8000), videoId, method: 'supadata' })
 
   } catch (err: any) {
     console.error('Transcript error:', err)
