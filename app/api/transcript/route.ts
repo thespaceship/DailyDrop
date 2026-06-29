@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { YoutubeTranscript } from 'youtube-transcript'
 
 export const maxDuration = 60
 
@@ -16,60 +15,47 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Could not parse YouTube URL' }, { status: 400 })
     }
 
-    // Step 1 — try YouTube captions first (free, fast)
+    // Use youtubei.js to fetch captions and video info
+    const { Innertube } = await import('youtubei.js')
+    const youtube = await Innertube.create({ retrieve_player: false })
+
+    // Try captions first
     try {
-      const transcript = await YoutubeTranscript.fetchTranscript(videoId)
-      const fullText = transcript.map(t => t.text).join(' ')
-      if (fullText.trim().length > 100) {
-        return NextResponse.json({ transcript: fullText.slice(0, 8000), videoId, method: 'captions' })
+      const info = await youtube.getInfo(videoId)
+      const transcriptData = await info.getTranscript()
+      const segments = transcriptData?.transcript?.content?.body?.initial_segments || []
+      const text = segments
+        .map((s: any) => s.snippet?.text || '')
+        .join(' ')
+        .trim()
+
+      if (text.length > 100) {
+        return NextResponse.json({ transcript: text.slice(0, 8000), videoId, method: 'captions' })
       }
     } catch {
-      // captions not available — fall through
+      // no captions, fall through
     }
 
-    // Step 2 — use YouTube's own timedtext API
+    // No captions — use Whisper on the audio stream
     try {
-      const timedTextUrl = `https://www.youtube.com/api/timedtext?lang=en&v=${videoId}&fmt=vtt`
-      const ttRes = await fetch(timedTextUrl, {
-        headers: { 'User-Agent': 'Mozilla/5.0' }
-      })
-      if (ttRes.ok) {
-        const vtt = await ttRes.text()
-        const cleaned = vtt
-          .replace(/WEBVTT\n/, '')
-          .replace(/\d{2}:\d{2}:\d{2}\.\d{3} --> \d{2}:\d{2}:\d{2}\.\d{3}.*\n/g, '')
-          .replace(/<[^>]+>/g, '')
-          .replace(/\n{2,}/g, ' ')
-          .trim()
-        if (cleaned.length > 100) {
-          return NextResponse.json({ transcript: cleaned.slice(0, 8000), videoId, method: 'timedtext' })
-        }
-      }
-    } catch {
-      // fall through
-    }
+      const { Innertube: Innertube2 } = await import('youtubei.js')
+      const yt2 = await Innertube2.create()
+      const info = await yt2.getInfo(videoId)
+      const format = info.chooseFormat({ type: 'audio', quality: 'best' })
+      const streamUrl = format?.decipher(yt2.session.player)
 
-    // Step 3 — fetch audio via RapidAPI YouTube MP3 endpoint and send to Whisper
-    try {
-      const ytApiRes = await fetch(
-        `https://youtube-mp36.p.rapidapi.com/dl?id=${videoId}`,
-        {
-          headers: {
-            'X-RapidAPI-Key': process.env.RAPIDAPI_KEY || '',
-            'X-RapidAPI-Host': 'youtube-mp36.p.rapidapi.com'
-          }
-        }
-      )
-      const ytApiData = await ytApiRes.json()
+      if (streamUrl) {
+        const audioRes = await fetch(streamUrl, {
+          headers: { 'User-Agent': 'Mozilla/5.0' },
+          signal: AbortSignal.timeout(30000)
+        })
 
-      if (ytApiData.link) {
-        const audioRes = await fetch(ytApiData.link)
         if (audioRes.ok) {
           const audioBuffer = await audioRes.arrayBuffer()
-          const audioBlob = new Blob([audioBuffer], { type: 'audio/mpeg' })
+          const audioBlob = new Blob([audioBuffer], { type: 'audio/webm' })
 
           const formData = new FormData()
-          formData.append('file', audioBlob, 'audio.mp3')
+          formData.append('file', audioBlob, 'audio.webm')
           formData.append('model', 'whisper-1')
           formData.append('response_format', 'text')
 
@@ -85,8 +71,8 @@ export async function POST(req: NextRequest) {
           }
         }
       }
-    } catch {
-      // fall through
+    } catch (e) {
+      console.error('Whisper fallback error:', e)
     }
 
     return NextResponse.json({ transcript: null, error: 'Could not transcribe this video' })
