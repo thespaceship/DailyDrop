@@ -174,6 +174,10 @@ export default function Dashboard() {
     }
   }
 
+  function removeVideo(url: string) {
+    setVideos(prev => prev.filter(v => v.url !== url))
+  }
+  
   function removeEmail(index: number) {
     setEmails(prev => prev.filter((_, i) => i !== index))
   }
@@ -329,6 +333,7 @@ export default function Dashboard() {
                   {emails.map((e, i) => (
   <div key={i} className={styles.emailItem}>
     <div className={styles.emailMeta}>
+      .emailMeta { flex: 1; min-width: 0; }
       <div className={styles.emailSender}>{e.sender}</div>
       <div className={styles.emailSubject}>{e.subject}</div>
     </div>
