@@ -42,7 +42,7 @@ export async function POST(req: NextRequest) {
       const yt2 = await Innertube2.create()
       const info = await yt2.getInfo(videoId)
       const format = info.chooseFormat({ type: 'audio', quality: 'best' })
-      const streamUrl = format?.decipher(yt2.session.player)
+      const streamUrl = await format?.decipher(yt2.session.player)
 
       if (streamUrl) {
         const audioRes = await fetch(streamUrl, {
