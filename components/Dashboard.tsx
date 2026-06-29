@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import styles from './Dashboard.module.css'
 
 interface VideoItem {
@@ -17,25 +17,53 @@ interface EmailItem {
   time: string
 }
 
-type Step = 'idle' | 'transcripts' | 'briefing' | 'audio' | 'done' | 'error'
+interface Briefing {
+  id: string
+  created_at: string
+  script: string
+  audio_base64: string
+  voice_style: string
+  length: string
+  host_name: string
+  video_urls: string[]
+  email_senders: string[]
+}
+
+interface Voice {
+  id: string
+  name: string
+  category: string
+}
+
+type Tab = 'home' | 'history' | 'settings'
+type Step = 'idle' | 'briefing' | 'audio' | 'done' | 'error'
 type VoiceStyle = 'morning' | 'news' | 'podcast' | 'executive'
 type Length = 'short' | 'medium' | 'long'
 
 export default function Dashboard() {
+  const [tab, setTab] = useState<Tab>('home')
+
   const [videos, setVideos] = useState<VideoItem[]>([])
   const [urlInput, setUrlInput] = useState('')
   const [emails, setEmails] = useState<EmailItem[]>([])
   const [emailConnected, setEmailConnected] = useState(false)
-
-  const [voiceStyle, setVoiceStyle] = useState<VoiceStyle>('podcast')
-  const [hostName, setHostName] = useState('')
-  const [length, setLength] = useState<Length>('medium')
-
   const [step, setStep] = useState<Step>('idle')
   const [script, setScript] = useState('')
   const [audioSrc, setAudioSrc] = useState<string | null>(null)
   const [errorMsg, setErrorMsg] = useState('')
   const [stepLabel, setStepLabel] = useState('')
+
+  const [voiceStyle, setVoiceStyle] = useState<VoiceStyle>('podcast')
+  const [hostName, setHostName] = useState('')
+  const [length, setLength] = useState<Length>('medium')
+  const [voiceId, setVoiceId] = useState('21m00Tcm4TlvDq8ikWAM')
+  const [voices, setVoices] = useState<Voice[]>([])
+  const [voicesLoading, setVoicesLoading] = useState(false)
+  const [settingsSaved, setSettingsSaved] = useState(false)
+
+  const [briefings, setBriefings] = useState<Briefing[]>([])
+  const [historyLoading, setHistoryLoading] = useState(false)
+  const [playingId, setPlayingId] = useState<string | null>(null)
 
   const audioRef = useRef<HTMLAudioElement>(null)
 
@@ -43,16 +71,84 @@ export default function Dashboard() {
     weekday: 'long', month: 'short', day: 'numeric'
   })
 
-  // ── Video handling ──────────────────────────────────────
+  useEffect(() => {
+    const saved = localStorage.getItem('dailydrop_settings')
+    if (saved) {
+      const s = JSON.parse(saved)
+      setVoiceStyle(s.voiceStyle || 'podcast')
+      setHostName(s.hostName || '')
+      setLength(s.length || 'medium')
+      setVoiceId(s.voiceId || '21m00Tcm4TlvDq8ikWAM')
+    }
+  }, [])
+
+  useEffect(() => {
+    if (tab === 'history') loadHistory()
+    if (tab === 'settings' && voices.length === 0) loadVoices()
+  }, [tab])
+
+  async function loadVoices() {
+    setVoicesLoading(true)
+    try {
+      const res = await fetch('/api/voices')
+      const data = await res.json()
+      setVoices(data.voices || [])
+    } catch {
+      setVoices([])
+    }
+    setVoicesLoading(false)
+  }
+
+  async function loadHistory() {
+    setHistoryLoading(true)
+    try {
+      const res = await fetch('/api/history')
+      const data = await res.json()
+      setBriefings(data.briefings || [])
+    } catch {
+      setBriefings([])
+    }
+    setHistoryLoading(false)
+  }
+
+  function saveSettings() {
+    localStorage.setItem('dailydrop_settings', JSON.stringify({
+      voiceStyle, hostName, length, voiceId
+    }))
+    setSettingsSaved(true)
+    setTimeout(() => setSettingsSaved(false), 2000)
+  }
+
+  async function deleteBriefing(id: string) {
+    await fetch('/api/history', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id }),
+    })
+    setBriefings(prev => prev.filter(b => b.id !== id))
+  }
+
+  function playHistoryAudio(b: Briefing) {
+    if (playingId === b.id) {
+      audioRef.current?.pause()
+      setPlayingId(null)
+      return
+    }
+    const src = `data:audio/mpeg;base64,${b.audio_base64}`
+    if (audioRef.current) {
+      audioRef.current.src = src
+      audioRef.current.play()
+      setPlayingId(b.id)
+      audioRef.current.onended = () => setPlayingId(null)
+    }
+  }
 
   async function addVideo() {
     const url = urlInput.trim()
     if (!url) return
     setUrlInput('')
-
     const newVideo: VideoItem = { url, transcript: null, status: 'loading' }
     setVideos(prev => [...prev, newVideo])
-
     try {
       const res = await fetch('/api/transcript', {
         method: 'POST',
@@ -60,7 +156,6 @@ export default function Dashboard() {
         body: JSON.stringify({ url }),
       })
       const data = await res.json()
-
       setVideos(prev => prev.map(v =>
         v.url === url
           ? { ...v, transcript: data.transcript || null, status: data.transcript ? 'ready' : 'error', errorMsg: data.error }
@@ -77,8 +172,6 @@ export default function Dashboard() {
     setVideos(prev => prev.filter(v => v.url !== url))
   }
 
-  // ── Demo email connect ─────────────────────────────────
-
   function connectDemoEmails() {
     setEmails([
       { sender: 'Morning Brew', subject: 'The Fed blinked — what it means for markets', snippet: 'The Federal Reserve held rates steady yesterday but signaled two cuts before year end, sending stocks to a three-month high.', time: '6:02 AM' },
@@ -88,19 +181,14 @@ export default function Dashboard() {
     setEmailConnected(true)
   }
 
-  // ── Generate flow ──────────────────────────────────────
-
   async function generate() {
-    setStep('transcripts')
+    setStep('briefing')
     setScript('')
     setAudioSrc(null)
     setErrorMsg('')
 
     try {
-      // Step 1 — Script
-      setStep('briefing')
       setStepLabel('Writing your script...')
-
       const briefRes = await fetch('/api/briefing', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -108,17 +196,14 @@ export default function Dashboard() {
       })
       const briefData = await briefRes.json()
       if (!briefRes.ok) throw new Error(briefData.error || 'Script generation failed')
-
       setScript(briefData.script)
 
-      // Step 2 — Audio
       setStep('audio')
       setStepLabel('Generating audio...')
-
       const audioRes = await fetch('/api/audio', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ script: briefData.script }),
+        body: JSON.stringify({ script: briefData.script, voiceId }),
       })
       const audioData = await audioRes.json()
       if (!audioRes.ok) throw new Error(audioData.error || 'Audio generation failed')
@@ -126,6 +211,20 @@ export default function Dashboard() {
       const src = `data:audio/mpeg;base64,${audioData.audio}`
       setAudioSrc(src)
       setStep('done')
+
+      await fetch('/api/history', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          script: briefData.script,
+          audio: audioData.audio,
+          voiceStyle,
+          length,
+          hostName,
+          videoUrls: videos.map(v => v.url),
+          emailSenders: emails.map(e => e.sender),
+        }),
+      })
     } catch (err: any) {
       setErrorMsg(err.message || 'Something went wrong')
       setStep('error')
@@ -142,12 +241,10 @@ export default function Dashboard() {
 
   const canGenerate = (videos.length > 0 || emailConnected) && step !== 'briefing' && step !== 'audio'
 
-  // ── Render ─────────────────────────────────────────────
-
   return (
     <div className={styles.app}>
+      <audio ref={audioRef} style={{ display: 'none' }} />
 
-      {/* Header */}
       <header className={styles.header}>
         <div className={styles.headerLeft}>
           <div className={styles.logo}>📻</div>
@@ -160,75 +257,154 @@ export default function Dashboard() {
 
       <div className={styles.content}>
 
-        {/* Videos */}
-        <section className={styles.section}>
-          <div className={styles.sectionHeader}>
-            <span className={styles.sectionTitle}>🎬 Videos</span>
-            {videos.length > 0 && <span className={styles.badge}>{videos.length}</span>}
-          </div>
-
-          <div className={styles.inputRow}>
-            <input
-              type="url"
-              value={urlInput}
-              onChange={e => setUrlInput(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && addVideo()}
-              placeholder="Paste a YouTube URL..."
-              className={styles.urlInput}
-            />
-            <button className={styles.addBtn} onClick={addVideo}>Add</button>
-          </div>
-
-          {videos.map(v => (
-            <div key={v.url} className={styles.videoItem}>
-              <div className={styles.videoIcon}>▶</div>
-              <div className={styles.videoMeta}>
-                <div className={styles.videoUrl}>{v.url.replace('https://', '').slice(0, 40)}…</div>
-                <div className={`${styles.videoStatus} ${styles[v.status]}`}>
-                  {v.status === 'loading' && '⏳ Fetching transcript...'}
-                  {v.status === 'ready' && '✓ Transcript ready'}
-                  {v.status === 'error' && `⚠ ${v.errorMsg || 'No transcript — will skip'}`}
-                </div>
+        {tab === 'home' && (
+          <>
+            <section className={styles.section}>
+              <div className={styles.sectionHeader}>
+                <span className={styles.sectionTitle}>🎬 Videos</span>
+                {videos.length > 0 && <span className={styles.badge}>{videos.length}</span>}
               </div>
-              <button className={styles.removeBtn} onClick={() => removeVideo(v.url)}>✕</button>
-            </div>
-          ))}
-        </section>
-
-        {/* Newsletters */}
-        <section className={styles.section}>
-          <div className={styles.sectionHeader}>
-            <span className={styles.sectionTitle}>📧 Newsletters</span>
-            {emailConnected && <span className={styles.badge}>{emails.length} today</span>}
-          </div>
-
-          {!emailConnected ? (
-            <div className={styles.connectBox}>
-              <p className={styles.connectText}>Connect your newsletter inbox to pull today's emails automatically.</p>
-              <button className={styles.connectBtn} onClick={connectDemoEmails}>
-                Connect Gmail (demo)
-              </button>
-              <p className={styles.connectNote}>Real Gmail connection: see README for setup steps</p>
-            </div>
-          ) : (
-            <div className={styles.emailList}>
-              {emails.map((e, i) => (
-                <div key={i} className={styles.emailItem}>
-                  <div className={styles.emailSender}>{e.sender}</div>
-                  <div className={styles.emailSubject}>{e.subject}</div>
+              <div className={styles.inputRow}>
+                <input
+                  type="url"
+                  value={urlInput}
+                  onChange={e => setUrlInput(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && addVideo()}
+                  placeholder="Paste a YouTube URL..."
+                  className={styles.urlInput}
+                />
+                <button className={styles.addBtn} onClick={addVideo}>Add</button>
+              </div>
+              {videos.map(v => (
+                <div key={v.url} className={styles.videoItem}>
+                  <div className={styles.videoIcon}>▶</div>
+                  <div className={styles.videoMeta}>
+                    <div className={styles.videoUrl}>{v.url.replace('https://', '').slice(0, 38)}…</div>
+                    <div className={`${styles.videoStatus} ${styles[v.status]}`}>
+                      {v.status === 'loading' && '⏳ Fetching transcript...'}
+                      {v.status === 'ready' && '✓ Transcript ready'}
+                      {v.status === 'error' && `⚠ ${v.errorMsg || 'No transcript'}`}
+                    </div>
+                  </div>
+                  <button className={styles.removeBtn} onClick={() => removeVideo(v.url)}>✕</button>
                 </div>
               ))}
-            </div>
-          )}
-        </section>
+            </section>
 
-        {/* Options */}
-        <section className={styles.section}>
-          <div className={styles.sectionHeader}>
-            <span className={styles.sectionTitle}>⚙️ Options</span>
-          </div>
-          <div className={styles.optionsGrid}>
-            <div className={styles.optionField}>
+            <section className={styles.section}>
+              <div className={styles.sectionHeader}>
+                <span className={styles.sectionTitle}>📧 Newsletters</span>
+                {emailConnected && <span className={styles.badge}>{emails.length} today</span>}
+              </div>
+              {!emailConnected ? (
+                <div className={styles.connectBox}>
+                  <p className={styles.connectText}>Connect your newsletter inbox to pull today's emails automatically.</p>
+                  <button className={styles.connectBtn} onClick={connectDemoEmails}>Connect Gmail (demo)</button>
+                  <p className={styles.connectNote}>Real Gmail: see README for setup steps</p>
+                </div>
+              ) : (
+                <div className={styles.emailList}>
+                  {emails.map((e, i) => (
+                    <div key={i} className={styles.emailItem}>
+                      <div className={styles.emailSender}>{e.sender}</div>
+                      <div className={styles.emailSubject}>{e.subject}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
+
+            <button className={styles.generateBtn} onClick={generate} disabled={!canGenerate}>
+              {step === 'briefing' || step === 'audio' ? (
+                <span className={styles.generating}>
+                  <span className={styles.spinner} /> {stepLabel}
+                </span>
+              ) : step === 'done' ? '🔄 Regenerate' : '▶ Generate today\'s drop'}
+            </button>
+
+            {step === 'error' && <div className={styles.errorBox}>⚠ {errorMsg}</div>}
+
+            {step === 'done' && audioSrc && (
+              <section className={styles.section}>
+                <div className={styles.sectionHeader}>
+                  <span className={styles.sectionTitle}>🎧 Your drop</span>
+                  <span className={styles.badge}>Ready</span>
+                </div>
+                <audio src={audioSrc} controls className={styles.audioPlayer} />
+                <button className={styles.downloadBtn} onClick={downloadAudio}>↓ Download MP3</button>
+              </section>
+            )}
+
+            {script && (
+              <section className={styles.section}>
+                <div className={styles.sectionHeader}>
+                  <span className={styles.sectionTitle}>📄 Script</span>
+                </div>
+                <div className={styles.scriptBox}>{script}</div>
+              </section>
+            )}
+          </>
+        )}
+
+        {tab === 'history' && (
+          <section className={styles.section}>
+            <div className={styles.sectionHeader}>
+              <span className={styles.sectionTitle}>🕐 Past briefings</span>
+            </div>
+            {historyLoading ? (
+              <div className={styles.loadingBox}><span className={styles.spinner} /> Loading...</div>
+            ) : briefings.length === 0 ? (
+              <p className={styles.emptyText}>No briefings yet — generate your first drop.</p>
+            ) : (
+              briefings.map(b => (
+                <div key={b.id} className={styles.historyItem}>
+                  <div className={styles.historyMeta}>
+                    <div className={styles.historyDate}>
+                      {new Date(b.created_at).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                    </div>
+                    <div className={styles.historyDetail}>
+                      {b.voice_style} · {b.length}
+                      {b.video_urls?.length > 0 && ` · ${b.video_urls.length} video${b.video_urls.length > 1 ? 's' : ''}`}
+                      {b.email_senders?.length > 0 && ` · ${b.email_senders.length} newsletters`}
+                    </div>
+                    {b.script && (
+                      <div className={styles.historyScript}>{b.script.slice(0, 120)}…</div>
+                    )}
+                  </div>
+                  <div className={styles.historyActions}>
+                    {b.audio_base64 && (
+                      <button
+                        className={`${styles.historyBtn} ${playingId === b.id ? styles.playing : ''}`}
+                        onClick={() => playHistoryAudio(b)}
+                      >
+                        {playingId === b.id ? '⏸' : '▶'}
+                      </button>
+                    )}
+                    <button className={styles.historyDeleteBtn} onClick={() => deleteBriefing(b.id)}>✕</button>
+                  </div>
+                </div>
+              ))
+            )}
+          </section>
+        )}
+
+        {tab === 'settings' && (
+          <section className={styles.section}>
+            <div className={styles.sectionHeader}>
+              <span className={styles.sectionTitle}>⚙️ Settings</span>
+            </div>
+
+            <div className={styles.settingField}>
+              <label className={styles.label}>Host name</label>
+              <input
+                type="text"
+                value={hostName}
+                onChange={e => setHostName(e.target.value)}
+                placeholder="e.g. Alex"
+              />
+            </div>
+
+            <div className={styles.settingField}>
               <label className={styles.label}>Voice style</label>
               <select value={voiceStyle} onChange={e => setVoiceStyle(e.target.value as VoiceStyle)}>
                 <option value="podcast">Podcast — relaxed</option>
@@ -237,77 +413,50 @@ export default function Dashboard() {
                 <option value="executive">Executive briefing — concise</option>
               </select>
             </div>
-            <div className={styles.optionField}>
-              <label className={styles.label}>Length</label>
+
+            <div className={styles.settingField}>
+              <label className={styles.label}>Default length</label>
               <select value={length} onChange={e => setLength(e.target.value as Length)}>
                 <option value="short">Short (~3 min)</option>
                 <option value="medium">Medium (~7 min)</option>
                 <option value="long">Long (~15 min)</option>
               </select>
             </div>
-            <div className={styles.optionField} style={{ gridColumn: '1 / -1' }}>
-              <label className={styles.label}>Host name (optional)</label>
-              <input
-                type="text"
-                value={hostName}
-                onChange={e => setHostName(e.target.value)}
-                placeholder="e.g. Alex"
-              />
+
+            <div className={styles.settingField}>
+              <label className={styles.label}>ElevenLabs voice</label>
+              {voicesLoading ? (
+                <div className={styles.loadingBox}><span className={styles.spinner} /> Loading voices...</div>
+              ) : (
+                <select value={voiceId} onChange={e => setVoiceId(e.target.value)}>
+                  {voices.map(v => (
+                    <option key={v.id} value={v.id}>{v.name} {v.category === 'premade' ? '· Library' : '· Custom'}</option>
+                  ))}
+                </select>
+              )}
             </div>
-          </div>
-        </section>
 
-        {/* Generate button */}
-        <button
-          className={styles.generateBtn}
-          onClick={generate}
-          disabled={!canGenerate}
-        >
-          {step === 'briefing' || step === 'audio' ? (
-            <span className={styles.generating}>
-              <span className={styles.spinner} /> {stepLabel}
-            </span>
-          ) : step === 'done' ? (
-            '🔄 Regenerate'
-          ) : (
-            '▶ Generate today\'s drop'
-          )}
-        </button>
-
-        {/* Error */}
-        {step === 'error' && (
-          <div className={styles.errorBox}>⚠ {errorMsg}</div>
-        )}
-
-        {/* Output */}
-        {step === 'done' && audioSrc && (
-          <section className={styles.section}>
-            <div className={styles.sectionHeader}>
-              <span className={styles.sectionTitle}>🎧 Your drop</span>
-            </div>
-            <audio
-              ref={audioRef}
-              src={audioSrc}
-              controls
-              className={styles.audioPlayer}
-            />
-            <button className={styles.downloadBtn} onClick={downloadAudio}>
-              ↓ Download MP3
+            <button className={styles.saveBtn} onClick={saveSettings}>
+              {settingsSaved ? '✓ Saved' : 'Save settings'}
             </button>
           </section>
         )}
-
-        {/* Script preview */}
-        {script && (
-          <section className={styles.section}>
-            <div className={styles.sectionHeader}>
-              <span className={styles.sectionTitle}>📄 Script</span>
-            </div>
-            <div className={styles.scriptBox}>{script}</div>
-          </section>
-        )}
-
       </div>
+
+      <nav className={styles.nav}>
+        <button className={`${styles.navBtn} ${tab === 'home' ? styles.navActive : ''}`} onClick={() => setTab('home')}>
+          <span className={styles.navIcon}>🏠</span>
+          <span className={styles.navLabel}>Home</span>
+        </button>
+        <button className={`${styles.navBtn} ${tab === 'history' ? styles.navActive : ''}`} onClick={() => setTab('history')}>
+          <span className={styles.navIcon}>🕐</span>
+          <span className={styles.navLabel}>History</span>
+        </button>
+        <button className={`${styles.navBtn} ${tab === 'settings' ? styles.navActive : ''}`} onClick={() => setTab('settings')}>
+          <span className={styles.navIcon}>⚙️</span>
+          <span className={styles.navLabel}>Settings</span>
+        </button>
+      </nav>
     </div>
   )
 }
