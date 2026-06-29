@@ -24,46 +24,72 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ transcript: fullText.slice(0, 8000), videoId, method: 'captions' })
       }
     } catch {
-      // captions not available — fall through to Whisper
+      // captions not available — fall through
     }
 
-    // Step 2 — fall back to Whisper via OpenAI
-    // First fetch the audio stream URL from YouTube via oembed + invidious
-    const audioUrl = await getYouTubeAudioUrl(videoId)
-    if (!audioUrl) {
-      return NextResponse.json({ transcript: null, error: 'No transcript available and could not fetch audio' })
+    // Step 2 — use YouTube's own timedtext API
+    try {
+      const timedTextUrl = `https://www.youtube.com/api/timedtext?lang=en&v=${videoId}&fmt=vtt`
+      const ttRes = await fetch(timedTextUrl, {
+        headers: { 'User-Agent': 'Mozilla/5.0' }
+      })
+      if (ttRes.ok) {
+        const vtt = await ttRes.text()
+        const cleaned = vtt
+          .replace(/WEBVTT\n/, '')
+          .replace(/\d{2}:\d{2}:\d{2}\.\d{3} --> \d{2}:\d{2}:\d{2}\.\d{3}.*\n/g, '')
+          .replace(/<[^>]+>/g, '')
+          .replace(/\n{2,}/g, ' ')
+          .trim()
+        if (cleaned.length > 100) {
+          return NextResponse.json({ transcript: cleaned.slice(0, 8000), videoId, method: 'timedtext' })
+        }
+      }
+    } catch {
+      // fall through
     }
 
-    // Fetch the audio as a blob
-    const audioRes = await fetch(audioUrl)
-    if (!audioRes.ok) {
-      return NextResponse.json({ transcript: null, error: 'Could not download audio for transcription' })
+    // Step 3 — fetch audio via RapidAPI YouTube MP3 endpoint and send to Whisper
+    try {
+      const ytApiRes = await fetch(
+        `https://youtube-mp36.p.rapidapi.com/dl?id=${videoId}`,
+        {
+          headers: {
+            'X-RapidAPI-Key': process.env.RAPIDAPI_KEY || '',
+            'X-RapidAPI-Host': 'youtube-mp36.p.rapidapi.com'
+          }
+        }
+      )
+      const ytApiData = await ytApiRes.json()
+
+      if (ytApiData.link) {
+        const audioRes = await fetch(ytApiData.link)
+        if (audioRes.ok) {
+          const audioBuffer = await audioRes.arrayBuffer()
+          const audioBlob = new Blob([audioBuffer], { type: 'audio/mpeg' })
+
+          const formData = new FormData()
+          formData.append('file', audioBlob, 'audio.mp3')
+          formData.append('model', 'whisper-1')
+          formData.append('response_format', 'text')
+
+          const whisperRes = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${process.env.OPENAI_API_KEY}` },
+            body: formData,
+          })
+
+          if (whisperRes.ok) {
+            const transcriptText = await whisperRes.text()
+            return NextResponse.json({ transcript: transcriptText.slice(0, 8000), videoId, method: 'whisper' })
+          }
+        }
+      }
+    } catch {
+      // fall through
     }
 
-    const audioBuffer = await audioRes.arrayBuffer()
-    const audioBlob = new Blob([audioBuffer], { type: 'audio/mp4' })
-
-    // Send to OpenAI Whisper
-    const formData = new FormData()
-    formData.append('file', audioBlob, 'audio.mp4')
-    formData.append('model', 'whisper-1')
-    formData.append('response_format', 'text')
-
-    const whisperRes = await fetch('https://api.openai.com/v1/audio/transcriptions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
-      },
-      body: formData,
-    })
-
-    if (!whisperRes.ok) {
-      const err = await whisperRes.json().catch(() => ({}))
-      return NextResponse.json({ transcript: null, error: `Whisper error: ${err.error?.message || whisperRes.status}` })
-    }
-
-    const transcriptText = await whisperRes.text()
-    return NextResponse.json({ transcript: transcriptText.slice(0, 8000), videoId, method: 'whisper' })
+    return NextResponse.json({ transcript: null, error: 'Could not transcribe this video' })
 
   } catch (err: any) {
     console.error('Transcript error:', err)
@@ -81,37 +107,6 @@ function extractVideoId(url: string): string | null {
   for (const pattern of patterns) {
     const match = url.match(pattern)
     if (match) return match[1]
-  }
-  return null
-}
-
-// Uses Invidious (open YouTube frontend) to get a direct audio stream URL
-async function getYouTubeAudioUrl(videoId: string): Promise<string | null> {
-  const instances = [
-    'https://invidious.slippery.city',
-    'https://inv.nadeko.net',
-    'https://invidious.nerdvpn.de',
-  ]
-
-  for (const instance of instances) {
-    try {
-      const res = await fetch(`${instance}/api/v1/videos/${videoId}`, {
-        headers: { 'User-Agent': 'DailyDrop/1.0' },
-        signal: AbortSignal.timeout(8000),
-      })
-      if (!res.ok) continue
-
-      const data = await res.json()
-      const audioFormats = (data.adaptiveFormats || [])
-        .filter((f: any) => f.type?.startsWith('audio/') && f.url)
-        .sort((a: any, b: any) => (b.bitrate || 0) - (a.bitrate || 0))
-
-      if (audioFormats.length > 0) {
-        return audioFormats[0].url
-      }
-    } catch {
-      continue
-    }
   }
   return null
 }
