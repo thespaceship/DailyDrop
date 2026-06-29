@@ -1,8 +1,3 @@
-bash
-
-cat /home/claude/dailydrop/app/api/transcript/route.ts
-Output
-
 import { NextRequest, NextResponse } from 'next/server'
 import { YoutubeTranscript } from 'youtube-transcript'
 
