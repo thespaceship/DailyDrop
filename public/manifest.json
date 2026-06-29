@@ -2,7 +2,7 @@
   "name": "DailyDrop",
   "short_name": "DailyDrop",
   "description": "Your AI morning briefing — videos and newsletters in one audio drop.",
-  "start_url": "/",
+  "start_url": "/drop/dadDailyDrop",
   "display": "standalone",
   "background_color": "#0a0a0a",
   "theme_color": "#0a0a0a",
