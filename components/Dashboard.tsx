@@ -72,6 +72,15 @@ export default function Dashboard() {
   })
 
   useEffect(() => {
+    const saved = localStorage.getItem('dailydrop_settings')
+    if (saved) {
+      const s = JSON.parse(saved)
+      setVoiceStyle(s.voiceStyle || 'podcast')
+      setHostName(s.hostName || '')
+      setLength(s.length || 'medium')
+      setVoiceId(s.voiceId || '21m00Tcm4TlvDq8ikWAM')
+    }
+
     const params = new URLSearchParams(window.location.search)
     const gmailStatus = params.get('gmail')
     if (gmailStatus === 'connected') {
@@ -177,7 +186,7 @@ export default function Dashboard() {
   function removeVideo(url: string) {
     setVideos(prev => prev.filter(v => v.url !== url))
   }
-  
+
   function removeEmail(index: number) {
     setEmails(prev => prev.filter((_, i) => i !== index))
   }
@@ -326,20 +335,19 @@ export default function Dashboard() {
                 <div className={styles.connectBox}>
                   <p className={styles.connectText}>Connect your newsletter inbox to pull today's emails automatically.</p>
                   <button className={styles.connectBtn} onClick={connectGmail}>Connect Gmail</button>
-                  <p className={styles.connectNote}>Real Gmail: see README for setup steps</p>
                 </div>
+              ) : emails.length === 0 ? (
+                <p className={styles.emptyText}>No emails yet today.</p>
               ) : (
                 <div className={styles.emailList}>
                   {emails.map((e, i) => (
-  <div key={i} className={styles.emailItem}>
-    <div className={styles.emailMeta}>
-      .emailMeta { flex: 1; min-width: 0; }
-      <div className={styles.emailSender}>{e.sender}</div>
-      <div className={styles.emailSubject}>{e.subject}</div>
-    </div>
-    <button className={styles.emailRemoveBtn} onClick={() => removeEmail(i)}>✕</button>
-  </div>
-))}
+                    <div key={i} className={styles.emailItem}>
+                      <div className={styles.emailMeta}>
+                        <div className={styles.emailSender}>{e.sender}</div>
+                        <div className={styles.emailSubject}>{e.subject}</div>
+                      </div>
+                      <button className={styles.emailRemoveBtn} onClick={() => removeEmail(i)}>✕</button>
+                    </div>
                   ))}
                 </div>
               )}
