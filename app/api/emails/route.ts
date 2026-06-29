@@ -26,6 +26,9 @@ export async function GET(req: NextRequest) {
 
     const today = new Date()
     today.setHours(0, 0, 0, 0)
+    today.setMinutes(0)
+    today.setSeconds(0)
+    today.setMilliseconds(0)
     const after = Math.floor(today.getTime() / 1000)
 
     const searchRes = await fetch(

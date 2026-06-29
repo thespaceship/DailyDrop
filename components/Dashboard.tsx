@@ -174,8 +174,8 @@ export default function Dashboard() {
     }
   }
 
-  function removeVideo(url: string) {
-    setVideos(prev => prev.filter(v => v.url !== url))
+  function removeEmail(index: number) {
+    setEmails(prev => prev.filter((_, i) => i !== index))
   }
 
   function connectGmail() {
@@ -327,10 +327,14 @@ export default function Dashboard() {
               ) : (
                 <div className={styles.emailList}>
                   {emails.map((e, i) => (
-                    <div key={i} className={styles.emailItem}>
-                      <div className={styles.emailSender}>{e.sender}</div>
-                      <div className={styles.emailSubject}>{e.subject}</div>
-                    </div>
+  <div key={i} className={styles.emailItem}>
+    <div className={styles.emailMeta}>
+      <div className={styles.emailSender}>{e.sender}</div>
+      <div className={styles.emailSubject}>{e.subject}</div>
+    </div>
+    <button className={styles.emailRemoveBtn} onClick={() => removeEmail(i)}>✕</button>
+  </div>
+))}
                   ))}
                 </div>
               )}

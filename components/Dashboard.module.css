@@ -122,8 +122,15 @@
 .connectNote { font-size: 11px; color: #444; text-align: center; }
 
 .emailList { display: flex; flex-direction: column; gap: 2px; }
+.emailItem { padding: 8px 0; border-bottom: 1px solid #1e1e1e; display: flex; align-items: center; gap: 8px; }
+.emailItem:last-child { border-bottom: none; }
+.emailMeta { flex: 1; min-width: 0; }
+.emailRemoveBtn { background: none; color: #555; font-size: 14px; padding: 4px; flex-shrink: 0; }
+.emailRemoveBtn:active { color: #ff453a; }
 .emailItem { padding: 8px 0; border-bottom: 1px solid #1e1e1e; }
 .emailItem:last-child { border-bottom: none; }
+.emailRemoveBtn { background: none; color: #555; font-size: 14px; padding: 4px; flex-shrink: 0; }
+.emailRemoveBtn:active { color: #ff453a; }
 .emailSender { font-size: 12px; font-weight: 600; color: #4f8ef7; }
 .emailSubject { font-size: 13px; color: #888; margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
