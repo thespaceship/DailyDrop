@@ -43,6 +43,7 @@ export async function GET(req: NextRequest) {
     }
 
     const searchData = await searchRes.json()
+    console.log('Gmail search results:', JSON.stringify(searchData))
     const messages = searchData.messages || []
 
     if (messages.length === 0) {
