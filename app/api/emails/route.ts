@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
+
 export async function GET(req: NextRequest) {
   try {
     let accessToken = req.cookies.get('gmail_access_token')?.value
@@ -35,6 +38,7 @@ export async function GET(req: NextRequest) {
       `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=after:${after}&maxResults=20`,
       {
         headers: { Authorization: `Bearer ${accessToken}` },
+cache: 'no-store',
       }
     )
 
@@ -56,6 +60,7 @@ export async function GET(req: NextRequest) {
           `https://gmail.googleapis.com/gmail/v1/users/me/messages/${msg.id}?format=metadata&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=Date`,
           {
             headers: { Authorization: `Bearer ${accessToken}` },
+cache: 'no-store',
           }
         )
         const detail = await detailRes.json()
