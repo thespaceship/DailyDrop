@@ -456,9 +456,9 @@ export default function Dashboard() {
             <div className={styles.settingField}>
               <label className={styles.label}>Default length</label>
               <select value={length} onChange={e => setLength(e.target.value as Length)}>
-                <option value="short">Short (~3 min)</option>
-                <option value="medium">Medium (~7 min)</option>
-                <option value="long">Long (~15 min)</option>
+                <option value="short">Short (~15 min)</option>
+                <option value="medium">Medium (~30 min)</option>
+                <option value="long">Long (~45 min)</option>
               </select>
             </div>
 
