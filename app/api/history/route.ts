@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
       },
       body: JSON.stringify({
         script: body.script,
-        audio_base64: body.audio,
+        audio_url: body.audioUrl,
         voice_style: body.voiceStyle,
         length: body.length,
         host_name: body.hostName,
@@ -42,7 +42,7 @@ export async function POST(req: NextRequest) {
 export async function GET() {
   try {
     const res = await fetch(
-      `${SUPABASE_URL}/rest/v1/briefings?select=id,created_at,voice_style,length,host_name,video_urls,email_senders,script,audio_base64&order=created_at.desc&limit=20`,
+      `${SUPABASE_URL}/rest/v1/briefings?select=id,created_at,voice_style,length,host_name,video_urls,email_senders,script,audio_url&order=created_at.desc&limit=20`,
       {
         headers: {
           'apikey': SUPABASE_KEY,

@@ -21,7 +21,7 @@ interface Briefing {
   id: string
   created_at: string
   script: string
-  audio_base64: string
+  audio_url: string
   voice_style: string
   length: string
   host_name: string
@@ -149,9 +149,8 @@ export default function Dashboard() {
       setPlayingId(null)
       return
     }
-    const src = `data:audio/mpeg;base64,${b.audio_base64}`
-    if (audioRef.current) {
-      audioRef.current.src = src
+    if (audioRef.current && b.audio_url) {
+      audioRef.current.src = b.audio_url
       audioRef.current.play()
       setPlayingId(b.id)
       audioRef.current.onended = () => setPlayingId(null)
@@ -247,12 +246,33 @@ export default function Dashboard() {
       setAudioSrc(src)
       setStep('done')
 
+      // Upload audio directly to Supabase Storage (bypasses Vercel payload limits)
+      const audioBlob = await (await fetch(src)).blob()
+      const fileName = `briefing-${Date.now()}.mp3`
+
+      const uploadRes = await fetch(
+        `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/briefings-audio/${fileName}`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY}`,
+            'Content-Type': 'audio/mpeg',
+          },
+          body: audioBlob,
+        }
+      )
+
+      let audioUrl = null
+      if (uploadRes.ok) {
+        audioUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/briefings-audio/${fileName}`
+      }
+
       await fetch('/api/history', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           script: briefData.script,
-          audio: audioData.audio,
+          audioUrl,
           voiceStyle,
           length,
           hostName,
@@ -411,7 +431,7 @@ export default function Dashboard() {
                     )}
                   </div>
                   <div className={styles.historyActions}>
-                    {b.audio_base64 && (
+                    {b.audio_url && (
                       <button
                         className={`${styles.historyBtn} ${playingId === b.id ? styles.playing : ''}`}
                         onClick={() => playHistoryAudio(b)}
