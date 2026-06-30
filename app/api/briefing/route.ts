@@ -5,9 +5,9 @@ export async function POST(req: NextRequest) {
     const { videos, emails, voiceStyle, hostName, length } = await req.json()
 
     const lengthMap: Record<string, string> = {
-      short: '250–350 words',
-      medium: '500–650 words',
-      long: '900–1100 words',
+      short: '2000–2200 words',
+      medium: '4200–4500 words',
+      long: '6300–6800 words',
     }
 
     const styleMap: Record<string, string> = {
