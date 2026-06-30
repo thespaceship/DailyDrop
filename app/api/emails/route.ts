@@ -27,12 +27,12 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Not connected', emails: [] }, { status: 401 })
     }
 
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-    today.setMinutes(0)
-    today.setSeconds(0)
-    today.setMilliseconds(0)
-    const after = Math.floor(today.getTime() / 1000)
+    // Compute midnight in Pacific time, regardless of server timezone
+    const now = new Date()
+    const pacificString = now.toLocaleString('en-US', { timeZone: 'America/Los_Angeles' })
+    const pacificNow = new Date(pacificString)
+    pacificNow.setHours(0, 0, 0, 0)
+    const after = Math.floor(pacificNow.getTime() / 1000)
 
     const searchRes = await fetch(
       `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=after:${after}&maxResults=50`,
