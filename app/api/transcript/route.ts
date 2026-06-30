@@ -47,6 +47,7 @@ function extractVideoId(url: string): string | null {
     /(?:youtu\.be\/)([^&\n?#]+)/,
     /(?:youtube\.com\/embed\/)([^&\n?#]+)/,
     /(?:youtube\.com\/shorts\/)([^&\n?#]+)/,
+    /(?:youtube\.com\/live\/)([^&\n?#]+)/,
   ]
   for (const pattern of patterns) {
     const match = url.match(pattern)
