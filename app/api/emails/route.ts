@@ -35,7 +35,7 @@ export async function GET(req: NextRequest) {
     const after = Math.floor(today.getTime() / 1000)
 
     const searchRes = await fetch(
-      `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=after:${after}&maxResults=20`,
+      `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=after:${after}&maxResults=50`,
       {
         headers: { Authorization: `Bearer ${accessToken}` },
 cache: 'no-store',
