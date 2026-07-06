@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 
 export async function POST(req: NextRequest) {
   try {
-    const { script } = await req.json()
+    const { script, voiceId } = await req.json()
 
     if (!script) {
       return NextResponse.json({ error: 'No script provided' }, { status: 400 })

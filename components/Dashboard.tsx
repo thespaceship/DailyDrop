@@ -56,7 +56,7 @@ export default function Dashboard() {
   const [voiceStyle, setVoiceStyle] = useState<VoiceStyle>('podcast')
   const [hostName, setHostName] = useState('')
   const [length, setLength] = useState<Length>('medium')
-  const [voiceId, setVoiceId] = useState('21m00Tcm4TlvDq8ikWAM')
+  const [voiceId, setVoiceId] = useState('nova')
   const [voices, setVoices] = useState<Voice[]>([])
   const [voicesLoading, setVoicesLoading] = useState(false)
   const [settingsSaved, setSettingsSaved] = useState(false)
@@ -78,7 +78,7 @@ export default function Dashboard() {
       setVoiceStyle(s.voiceStyle || 'podcast')
       setHostName(s.hostName || '')
       setLength(s.length || 'medium')
-      setVoiceId(s.voiceId || '21m00Tcm4TlvDq8ikWAM')
+      setVoiceId(s.voiceId || 'nova')
     }
 
     const params = new URLSearchParams(window.location.search)
@@ -103,15 +103,17 @@ export default function Dashboard() {
   }, [tab])
 
   async function loadVoices() {
-    setVoicesLoading(true)
-    try {
-      const res = await fetch('/api/voices')
-      const data = await res.json()
-      setVoices(data.voices || [])
-    } catch {
-      setVoices([])
-    }
-    setVoicesLoading(false)
+    setVoices([
+      { id: 'nova', name: 'Nova — warm, natural female', category: 'openai' },
+      { id: 'alloy', name: 'Alloy — neutral, balanced', category: 'openai' },
+      { id: 'echo', name: 'Echo — smooth male', category: 'openai' },
+      { id: 'fable', name: 'Fable — expressive male', category: 'openai' },
+      { id: 'onyx', name: 'Onyx — deep, authoritative male', category: 'openai' },
+      { id: 'shimmer', name: 'Shimmer — clear, bright female', category: 'openai' },
+      { id: 'ash', name: 'Ash — calm, measured', category: 'openai' },
+      { id: 'sage', name: 'Sage — thoughtful, clear', category: 'openai' },
+      { id: 'coral', name: 'Coral — warm, friendly female', category: 'openai' },
+    ])
   }
 
   async function loadHistory() {
