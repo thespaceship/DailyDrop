@@ -485,7 +485,7 @@ export default function Dashboard() {
             </div>
 
             <div className={styles.settingField}>
-              <label className={styles.label}>ElevenLabs voice</label>
+              <label className={styles.label}>Voice</label>
               {voicesLoading ? (
                 <div className={styles.loadingBox}><span className={styles.spinner} /> Loading voices...</div>
               ) : (
