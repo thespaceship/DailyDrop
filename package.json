@@ -1,6 +1,6 @@
 {
   "name": "dailydrop",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -8,13 +8,10 @@
     "start": "next start"
   },
   "dependencies": {
-    "googleapis": "^140.0.1",
+    "lucide-react": "^0.408.0",
     "next": "14.2.3",
-    "nodemailer": "^6.9.13",
     "react": "^18",
-    "react-dom": "^18",
-    "youtube-transcript": "^1.2.1",
-    "youtubei.js": "^17.2.0"
+    "react-dom": "^18"
   },
   "devDependencies": {
     "@types/node": "^20",

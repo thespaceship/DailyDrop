@@ -1,142 +1,56 @@
 # DailyDrop
 
-Your AI morning briefing — YouTube videos and newsletters summarized into one podcast-style audio drop.
+A personal AI investment research assistant. It ingests YouTube videos and Gmail newsletters, generates a structured financial analysis briefing with Claude, converts it to audio with OpenAI TTS, and maintains an evolving investment thesis that compounds over time.
 
----
+## How it works
 
-## What this app does
+1. Paste YouTube URLs and/or connect Gmail — today's transcripts and newsletters become the inputs
+2. Hit Generate — Claude writes a structured briefing (market summary, bullish/bearish themes, 1/6/12-month outlooks, recommendations) using the analyst persona, the last 3 briefings, the current investment thesis, and the knowledge library as context
+3. The script is converted to audio (OpenAI TTS, chunked), uploaded to Supabase Storage, and saved to history
+4. The investment thesis is automatically updated with today's insights
 
-1. You paste YouTube URLs and/or connect your newsletter inbox
-2. Hit "Generate" — the app fetches transcripts, summarizes everything, and writes a cohesive podcast script
-3. ElevenLabs converts the script to a natural-sounding MP3
-4. Listen right in the browser or download the file
+## App structure
 
----
+- **Home** — add videos/newsletters, generate and play today's briefing
+- **Thesis** — the living investment memo, updated after every briefing
+- **Library** — permanent document store (earnings notes, research) injected into every briefing as context
+- **History** — all past briefings; the 2 most recent are pinned with full playback controls
+- **Settings** — analyst persona, name, briefing length, TTS voice
+- **/admin** — hidden panel (password protected via `ADMIN_PASSWORD`) for multi-user access links and the subscription toggle
 
-## Deploy in 4 steps
+Access is gated by secret link: `/drop/[token]`. The token is either the legacy `SECRET_ACCESS_TOKEN` env value or a per-user token from the `users` table (managed in /admin).
 
-### Step 1 — Put the code on GitHub
+## Stack
 
-1. Go to github.com → click "New repository"
-2. Name it `dailydrop` → click "Create repository"
-3. On your computer, open Terminal and run:
+Next.js 14 (App Router) + TypeScript, Supabase (Postgres via REST + Storage), Anthropic API (briefings, thesis, summaries), OpenAI API (TTS), Supadata (YouTube transcripts), Google OAuth (Gmail), Vercel (hosting). Stripe subscription infrastructure is built but dormant.
+
+## Environment variables
+
+```
+ANTHROPIC_API_KEY
+OPENAI_API_KEY
+SUPADATA_API_KEY
+NEXT_PUBLIC_SUPABASE_URL
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+GOOGLE_CLIENT_ID
+GOOGLE_CLIENT_SECRET
+SECRET_ACCESS_TOKEN
+NEXT_PUBLIC_APP_URL
+ADMIN_PASSWORD
+STRIPE_SECRET_KEY          (dormant)
+STRIPE_PUBLISHABLE_KEY     (dormant)
+STRIPE_WEBHOOK_SECRET      (dormant)
+```
+
+## Supabase tables
+
+`briefings` (with `summary` column), `investment_thesis`, `knowledge_library`, `users`, `subscriptions`, `app_settings`, plus the public `briefings-audio` storage bucket. All tables use permissive "allow all" RLS policies — access control happens at the app layer via secret links.
+
+## Development
 
 ```bash
-cd path/to/dailydrop
-git init
-git add .
-git commit -m "initial commit"
-git remote add origin https://github.com/YOUR_USERNAME/dailydrop.git
-git push -u origin main
+npm install
+npm run dev
 ```
 
----
-
-### Step 2 — Deploy to Vercel
-
-1. Go to vercel.com → click "Add New Project"
-2. Import your `dailydrop` GitHub repo
-3. Click "Deploy" — Vercel will build it automatically
-4. Your app is live at something like `dailydrop.vercel.app`
-
----
-
-### Step 3 — Add your environment variables
-
-In Vercel: go to your project → Settings → Environment Variables → add each of these:
-
-| Variable | Value |
-|---|---|
-| `ANTHROPIC_API_KEY` | Your key from console.anthropic.com |
-| `ELEVENLABS_API_KEY` | Your key from elevenlabs.io |
-| `ELEVENLABS_VOICE_ID` | `21m00Tcm4TlvDq8ikWAM` (Rachel) or your chosen voice ID |
-| `SECRET_ACCESS_TOKEN` | Make up a hard-to-guess word, e.g. `marco2024drop` |
-
-After adding variables: go to Deployments → click the three dots on your latest deployment → "Redeploy"
-
----
-
-### Step 4 — Access the app
-
-Your app URL will be:
-```
-https://dailydrop.vercel.app/drop/YOUR_SECRET_TOKEN
-```
-
-For example if your token is `marco2024drop`:
-```
-https://dailydrop.vercel.app/drop/marco2024drop
-```
-
-Send this link to anyone who should have access. Bookmark it on your iPhone home screen:
-- Open Safari → go to the URL
-- Tap the Share button (box with arrow)
-- Tap "Add to Home Screen"
-- Done — it installs like a real app
-
----
-
-## Change the ElevenLabs voice
-
-1. Go to elevenlabs.io → Voices
-2. Browse and find a voice you like → click it → copy the Voice ID from the URL or settings
-3. Update `ELEVENLABS_VOICE_ID` in Vercel environment variables
-4. Redeploy
-
----
-
-## Connect real Gmail (optional — for live newsletter fetching)
-
-Right now the app uses demo newsletter data. To connect a real Gmail inbox:
-
-### A — Set up Google Cloud
-
-1. Go to console.cloud.google.com
-2. Create a new project → name it "DailyDrop"
-3. Go to "APIs & Services" → "Enable APIs" → search for "Gmail API" → enable it
-4. Go to "OAuth consent screen" → External → fill in app name "DailyDrop" → save
-5. Go to "Credentials" → "Create Credentials" → "OAuth client ID"
-6. Application type: Web application
-7. Authorized redirect URIs: add `https://developers.google.com/oauthplayground`
-8. Copy your Client ID and Client Secret
-
-### B — Get a refresh token
-
-1. Go to developers.google.com/oauthplayground
-2. Click the gear icon (top right) → check "Use your own OAuth credentials"
-3. Paste your Client ID and Client Secret
-4. In the left panel, find "Gmail API v1" → select `https://www.googleapis.com/auth/gmail.readonly`
-5. Click "Authorize APIs" → sign in with the Gmail account that has the newsletters
-6. Click "Exchange authorization code for tokens"
-7. Copy the "Refresh token"
-
-### C — Add to Vercel
-
-Add these environment variables in Vercel:
-- `GOOGLE_CLIENT_ID` — from step A
-- `GOOGLE_CLIENT_SECRET` — from step A
-- `GOOGLE_REFRESH_TOKEN` — from step B
-
-Then swap out the `connectDemoEmails()` function in `components/Dashboard.tsx` for a real `/api/emails` route (ask Claude to build this next).
-
----
-
-## Updating the app
-
-Any time you want to make a change:
-1. Edit the files
-2. Run `git add . && git commit -m "update" && git push`
-3. Vercel auto-deploys in about 30 seconds
-
----
-
-## Cost breakdown
-
-| Service | Cost per briefing |
-|---|---|
-| Claude API (script) | ~$0.003 |
-| ElevenLabs (audio) | ~$0.18–0.35 |
-| Vercel hosting | Free |
-| **Total** | **~$0.20–0.35** |
-
-With $5 in Anthropic credits you can run ~1,500+ briefings before reloading.
+Then open `http://localhost:3000/drop/<SECRET_ACCESS_TOKEN>`.

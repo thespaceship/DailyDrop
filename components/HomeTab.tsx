@@ -1,0 +1,380 @@
+'use client'
+
+import { useEffect, useState } from 'react'
+import { Youtube, Mail, X, AlertTriangle, Headphones, FileText, RefreshCw, Play } from 'lucide-react'
+import AudioPlayer from './AudioPlayer'
+import ScriptView from './ScriptView'
+import type { EmailItem, UserSettings, VideoItem } from '@/lib/types'
+
+type Step = 'idle' | 'briefing' | 'audio' | 'saving' | 'thesis' | 'done' | 'error'
+
+const STEP_LABELS: Record<string, string> = {
+  briefing: 'Writing your briefing...',
+  audio: 'Generating audio...',
+  saving: 'Saving...',
+  thesis: 'Updating investment thesis...',
+}
+
+interface HomeTabProps {
+  token: string
+  settings: UserSettings
+}
+
+export default function HomeTab({ token, settings }: HomeTabProps) {
+  const [videos, setVideos] = useState<VideoItem[]>([])
+  const [urlInput, setUrlInput] = useState('')
+  const [emails, setEmails] = useState<EmailItem[]>([])
+  const [emailConnected, setEmailConnected] = useState(false)
+  const [emailsLoading, setEmailsLoading] = useState(false)
+
+  const [step, setStep] = useState<Step>('idle')
+  const [script, setScript] = useState('')
+  const [audioSrc, setAudioSrc] = useState<string | null>(null)
+  const [errorMsg, setErrorMsg] = useState('')
+  const [thesisNote, setThesisNote] = useState('')
+  const [showScript, setShowScript] = useState(false)
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const gmailStatus = params.get('gmail')
+    if (gmailStatus === 'connected') {
+      fetchEmails()
+      window.history.replaceState({}, '', window.location.pathname)
+      return
+    }
+    if (gmailStatus === 'error') {
+      setErrorMsg('Gmail connection failed. Please try again.')
+      window.history.replaceState({}, '', window.location.pathname)
+    }
+    if (localStorage.getItem('gmail_connected') === 'true') {
+      fetchEmails()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  async function fetchEmails() {
+    setEmailsLoading(true)
+    try {
+      const res = await fetch('/api/emails')
+      const data = await res.json()
+      if (res.status === 401) {
+        localStorage.removeItem('gmail_connected')
+        setEmailConnected(false)
+      } else if (res.ok) {
+        setEmails(data.emails || [])
+        setEmailConnected(true)
+        localStorage.setItem('gmail_connected', 'true')
+      }
+    } catch {
+      localStorage.removeItem('gmail_connected')
+      setEmailConnected(false)
+    }
+    setEmailsLoading(false)
+  }
+
+  function connectGmail() {
+    window.location.href = `/api/auth?return=${encodeURIComponent(token)}`
+  }
+
+  async function addVideo() {
+    const url = urlInput.trim()
+    if (!url || videos.some(v => v.url === url)) return
+    setUrlInput('')
+    setVideos(prev => [...prev, { url, transcript: null, status: 'loading' }])
+
+    try {
+      const res = await fetch('/api/transcript', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url }),
+      })
+      const data = await res.json()
+      setVideos(prev =>
+        prev.map(v =>
+          v.url === url
+            ? {
+                ...v,
+                transcript: data.transcript || null,
+                status: data.transcript ? 'ready' : 'error',
+                errorMsg: data.error,
+              }
+            : v
+        )
+      )
+    } catch {
+      setVideos(prev =>
+        prev.map(v =>
+          v.url === url ? { ...v, status: 'error', errorMsg: 'Could not fetch transcript' } : v
+        )
+      )
+    }
+  }
+
+  function removeVideo(url: string) {
+    setVideos(prev => prev.filter(v => v.url !== url))
+  }
+
+  function removeEmail(index: number) {
+    setEmails(prev => prev.filter((_, i) => i !== index))
+  }
+
+  async function generate() {
+    setStep('briefing')
+    setScript('')
+    setAudioSrc(null)
+    setErrorMsg('')
+    setThesisNote('')
+    setShowScript(false)
+
+    try {
+      // 1. Generate the briefing script (with consolidation context server-side)
+      const briefRes = await fetch('/api/briefing', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          videos: videos.map(v => ({ url: v.url, transcript: v.transcript })),
+          emails,
+          persona: settings.persona,
+          hostName: settings.hostName,
+          length: settings.length,
+        }),
+      })
+      const briefData = await briefRes.json()
+      if (!briefRes.ok) throw new Error(briefData.error || 'Script generation failed')
+      setScript(briefData.script)
+
+      // 2. Convert to audio
+      setStep('audio')
+      const audioRes = await fetch('/api/audio', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ script: briefData.script, voiceId: settings.voiceId }),
+      })
+      const audioData = await audioRes.json()
+      if (!audioRes.ok) throw new Error(audioData.error || 'Audio generation failed')
+
+      const src = `data:audio/mpeg;base64,${audioData.audio}`
+      setAudioSrc(src)
+
+      // 3. Upload audio to Supabase Storage (client-side, bypasses Vercel payload limits)
+      setStep('saving')
+      let audioUrl: string | null = null
+      try {
+        const audioBlob = await (await fetch(src)).blob()
+        const fileName = `briefing-${Date.now()}.mp3`
+        const uploadRes = await fetch(
+          `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/briefings-audio/${fileName}`,
+          {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY}`,
+              'Content-Type': 'audio/mpeg',
+            },
+            body: audioBlob,
+          }
+        )
+        if (uploadRes.ok) {
+          audioUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/briefings-audio/${fileName}`
+        }
+      } catch {
+        // Audio upload failure is non-fatal — the briefing still plays locally.
+      }
+
+      // 4. Save to history
+      await fetch('/api/history', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          script: briefData.script,
+          summary: briefData.summary,
+          audioUrl,
+          voiceStyle: settings.voiceId,
+          length: settings.length,
+          hostName: settings.hostName,
+          videoUrls: videos.map(v => v.url),
+          emailSenders: emails.map(e => e.sender),
+        }),
+      })
+
+      // 5. Update the evolving investment thesis (non-fatal)
+      setStep('thesis')
+      try {
+        const thesisRes = await fetch('/api/thesis', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ insights: briefData.summary || briefData.script }),
+        })
+        if (!thesisRes.ok) {
+          const thesisData = await thesisRes.json().catch(() => ({}))
+          setThesisNote(thesisData.error || 'Thesis update failed — the briefing itself was saved.')
+        }
+      } catch {
+        setThesisNote('Thesis update failed — the briefing itself was saved.')
+      }
+
+      setStep('done')
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : 'Something went wrong')
+      setStep('error')
+    }
+  }
+
+  const busy = step === 'briefing' || step === 'audio' || step === 'saving' || step === 'thesis'
+  const canGenerate =
+    (videos.some(v => v.status === 'ready') || emails.length > 0) && !busy
+
+  return (
+    <div className="stack-16">
+      <section className="card">
+        <div className="section-head">
+          <span className="section-title">
+            <Youtube size={15} />
+            Videos
+          </span>
+          {videos.length > 0 && <span className="badge">{videos.length}</span>}
+        </div>
+        <div className="input-row">
+          <input
+            type="url"
+            value={urlInput}
+            onChange={e => setUrlInput(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && addVideo()}
+            placeholder="Paste a YouTube URL"
+          />
+          <button className="btn btn-ghost btn-sm" onClick={addVideo}>
+            Add
+          </button>
+        </div>
+        {videos.map(v => (
+          <div key={v.url} className="item-row">
+            <div className="item-main">
+              <div className="item-title">{v.url.replace(/^https?:\/\//, '')}</div>
+              <div className="status-row" style={{ marginTop: 3 }}>
+                {v.status === 'loading' && (
+                  <>
+                    <span className="dot dot-loading" /> Fetching transcript
+                  </>
+                )}
+                {v.status === 'ready' && (
+                  <>
+                    <span className="dot dot-success" /> Transcript ready
+                  </>
+                )}
+                {v.status === 'error' && (
+                  <>
+                    <span className="dot dot-danger" /> {v.errorMsg || 'No transcript'}
+                  </>
+                )}
+              </div>
+            </div>
+            <button
+              className="btn-icon btn-icon-danger"
+              onClick={() => removeVideo(v.url)}
+              aria-label="Remove video"
+            >
+              <X size={16} />
+            </button>
+          </div>
+        ))}
+      </section>
+
+      <section className="card">
+        <div className="section-head">
+          <span className="section-title">
+            <Mail size={15} />
+            Newsletters
+          </span>
+          {emailConnected && <span className="badge">{emails.length} today</span>}
+        </div>
+        {!emailConnected ? (
+          <div className="stack-8">
+            <p className="empty-text">
+              Connect your inbox to pull today&apos;s newsletters automatically.
+            </p>
+            <button className="btn btn-ghost btn-block" onClick={connectGmail}>
+              Connect Gmail
+            </button>
+          </div>
+        ) : emailsLoading ? (
+          <div className="status-row">
+            <span className="dot dot-loading" /> Loading emails
+          </div>
+        ) : emails.length === 0 ? (
+          <p className="empty-text">No emails yet today.</p>
+        ) : (
+          emails.map((e, i) => (
+            <div key={`${e.sender}-${i}`} className="item-row">
+              <div className="item-main">
+                <div className="item-title">{e.sender}</div>
+                <div className="item-sub">{e.subject}</div>
+              </div>
+              <button
+                className="btn-icon btn-icon-danger"
+                onClick={() => removeEmail(i)}
+                aria-label="Remove email"
+              >
+                <X size={16} />
+              </button>
+            </div>
+          ))
+        )}
+      </section>
+
+      <button className="btn btn-primary btn-block" onClick={generate} disabled={!canGenerate}>
+        {busy ? (
+          <>
+            <span className="spinner" /> {STEP_LABELS[step]}
+          </>
+        ) : step === 'done' ? (
+          <>
+            <RefreshCw size={16} /> Regenerate
+          </>
+        ) : (
+          <>
+            <Play size={16} /> Generate today&apos;s briefing
+          </>
+        )}
+      </button>
+
+      {step === 'error' && (
+        <div className="error-box">
+          <AlertTriangle size={16} style={{ flexShrink: 0, marginTop: 1 }} />
+          {errorMsg}
+        </div>
+      )}
+
+      {thesisNote && step === 'done' && <div className="notice-box">{thesisNote}</div>}
+
+      {audioSrc && (
+        <section className="card">
+          <div className="section-head">
+            <span className="section-title">
+              <Headphones size={15} />
+              Today&apos;s briefing
+            </span>
+            <span className="badge badge-accent">Ready</span>
+          </div>
+          <AudioPlayer
+            src={audioSrc}
+            downloadName={`dailydrop-${new Date().toISOString().slice(0, 10)}.mp3`}
+          />
+        </section>
+      )}
+
+      {script && (
+        <section className="card">
+          <div className="section-head">
+            <span className="section-title">
+              <FileText size={15} />
+              Script
+            </span>
+            <button className="btn btn-ghost btn-sm" onClick={() => setShowScript(s => !s)}>
+              {showScript ? 'Hide' : 'Show'}
+            </button>
+          </div>
+          {showScript && <ScriptView script={script} />}
+        </section>
+      )}
+    </div>
+  )
+}

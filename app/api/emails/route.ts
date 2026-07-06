@@ -1,7 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { fetchWithRetry } from '@/lib/retry'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
+
+interface GmailHeader {
+  name: string
+  value: string
+}
 
 export async function GET(req: NextRequest) {
   try {
@@ -9,7 +15,7 @@ export async function GET(req: NextRequest) {
     const refreshToken = req.cookies.get('gmail_refresh_token')?.value
 
     if (!accessToken && refreshToken) {
-      const refreshRes = await fetch('https://oauth2.googleapis.com/token', {
+      const refreshRes = await fetchWithRetry('https://oauth2.googleapis.com/token', {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: new URLSearchParams({
@@ -30,70 +36,76 @@ export async function GET(req: NextRequest) {
     // Compute midnight in Pacific time, regardless of server timezone
     const now = new Date()
     const pacificString = now.toLocaleString('en-US', { timeZone: 'America/Los_Angeles' })
-    const pacificNow = new Date(pacificString)
-    pacificNow.setHours(0, 0, 0, 0)
-    const after = Math.floor(pacificNow.getTime() / 1000)
+    const pacificMidnight = new Date(pacificString)
+    pacificMidnight.setHours(0, 0, 0, 0)
+    const after = Math.floor(pacificMidnight.getTime() / 1000)
 
-    const searchRes = await fetch(
+    const searchRes = await fetchWithRetry(
       `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=after:${after}&maxResults=50`,
       {
         headers: { Authorization: `Bearer ${accessToken}` },
-cache: 'no-store',
+        cache: 'no-store',
       }
     )
 
     if (!searchRes.ok) {
+      if (searchRes.status === 401) {
+        return NextResponse.json({ error: 'Not connected', emails: [] }, { status: 401 })
+      }
       return NextResponse.json({ error: 'Failed to fetch emails', emails: [] }, { status: 500 })
     }
 
     const searchData = await searchRes.json()
-    console.log('Gmail search results:', JSON.stringify(searchData))
-    const messages = searchData.messages || []
+    const messages: { id: string }[] = searchData.messages || []
 
     if (messages.length === 0) {
-      return NextResponse.json({ emails: [] })
+      return respondWithToken({ emails: [] }, accessToken)
     }
 
-    const emailDetails = await Promise.all(
-      messages.slice(0, 15).map(async (msg: any) => {
-        const detailRes = await fetch(
+    const emails = await Promise.all(
+      messages.slice(0, 15).map(async msg => {
+        const detailRes = await fetchWithRetry(
           `https://gmail.googleapis.com/gmail/v1/users/me/messages/${msg.id}?format=metadata&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=Date`,
           {
             headers: { Authorization: `Bearer ${accessToken}` },
-cache: 'no-store',
+            cache: 'no-store',
           }
         )
         const detail = await detailRes.json()
-        const headers = detail.payload?.headers || []
+        const headers: GmailHeader[] = detail.payload?.headers || []
 
-        const from = headers.find((h: any) => h.name === 'From')?.value || ''
-        const subject = headers.find((h: any) => h.name === 'Subject')?.value || ''
-        const date = headers.find((h: any) => h.name === 'Date')?.value || ''
-        const snippet = detail.snippet || ''
+        const from = headers.find(h => h.name === 'From')?.value || ''
+        const subject = headers.find(h => h.name === 'Subject')?.value || ''
+        const date = headers.find(h => h.name === 'Date')?.value || ''
+        const snippet: string = detail.snippet || ''
 
         const senderMatch = from.match(/^([^<]+)/)
         const sender = senderMatch ? senderMatch[1].trim().replace(/"/g, '') : from
 
-        const dateObj = new Date(date)
-        const time = dateObj.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+        const time = date
+          ? new Date(date).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+          : ''
 
         return { sender, subject, snippet, time }
       })
     )
 
-    const response = NextResponse.json({ emails: emailDetails })
-    if (accessToken) {
-      response.cookies.set('gmail_access_token', accessToken, {
-        httpOnly: true,
-        secure: true,
-        maxAge: 3600,
-        path: '/',
-      })
-    }
-
-    return response
-  } catch (err: any) {
+    return respondWithToken({ emails }, accessToken)
+  } catch (err) {
     console.error('Emails error:', err)
-    return NextResponse.json({ error: err.message, emails: [] }, { status: 500 })
+    const message = err instanceof Error ? err.message : 'Failed to fetch emails'
+    return NextResponse.json({ error: message, emails: [] }, { status: 500 })
   }
+}
+
+/** Persist a (possibly refreshed) access token back to the cookie. */
+function respondWithToken(body: object, accessToken: string): NextResponse {
+  const response = NextResponse.json(body)
+  response.cookies.set('gmail_access_token', accessToken, {
+    httpOnly: true,
+    secure: true,
+    maxAge: 3600,
+    path: '/',
+  })
+  return response
 }

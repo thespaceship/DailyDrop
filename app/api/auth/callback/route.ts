@@ -4,11 +4,17 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const code = searchParams.get('code')
   const error = searchParams.get('error')
+  const state = searchParams.get('state') || ''
   const appUrl = process.env.NEXT_PUBLIC_APP_URL!
-  const token = process.env.SECRET_ACCESS_TOKEN!
+
+  // Return to the token URL the user came from; fall back to the legacy env token.
+  const returnToken = /^[A-Za-z0-9_-]{1,128}$/.test(state)
+    ? state
+    : process.env.SECRET_ACCESS_TOKEN!
+  const dropUrl = `${appUrl}/drop/${returnToken}`
 
   if (error || !code) {
-    return NextResponse.redirect(`${appUrl}/drop/${token}?gmail=error`)
+    return NextResponse.redirect(`${dropUrl}?gmail=error`)
   }
 
   try {
@@ -32,7 +38,7 @@ export async function GET(req: NextRequest) {
       throw new Error('No access token received')
     }
 
-    const response = NextResponse.redirect(`${appUrl}/drop/${token}?gmail=connected`)
+    const response = NextResponse.redirect(`${dropUrl}?gmail=connected`)
 
     response.cookies.set('gmail_access_token', tokens.access_token, {
       httpOnly: true,
@@ -51,8 +57,8 @@ export async function GET(req: NextRequest) {
     }
 
     return response
-  } catch (err: any) {
+  } catch (err) {
     console.error('OAuth callback error:', err)
-    return NextResponse.redirect(`${appUrl}/drop/${token}?gmail=error`)
+    return NextResponse.redirect(`${dropUrl}?gmail=error`)
   }
 }
