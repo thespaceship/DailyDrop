@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { Youtube, Mail, X, AlertTriangle, Headphones, FileText, RefreshCw, Play } from 'lucide-react'
 import AudioPlayer from './AudioPlayer'
 import ScriptView from './ScriptView'
+import { useWakeLock } from '@/lib/useWakeLock'
 import type { EmailItem, UserSettings, VideoItem } from '@/lib/types'
 
 type Step = 'idle' | 'briefing' | 'audio' | 'saving' | 'thesis' | 'done' | 'error'
@@ -156,38 +157,17 @@ export default function HomeTab({ token, settings }: HomeTabProps) {
       const src = `data:audio/mpeg;base64,${audioData.audio}`
       setAudioSrc(src)
 
-      // 3. Upload audio to Supabase Storage (client-side, bypasses Vercel payload limits)
+      // 3. Save to history. The audio was already uploaded to Supabase
+      // Storage server-side (inside /api/audio), so this doesn't depend on
+      // the phone staying awake or the tab staying foregrounded.
       setStep('saving')
-      let audioUrl: string | null = null
-      try {
-        const audioBlob = await (await fetch(src)).blob()
-        const fileName = `briefing-${Date.now()}.mp3`
-        const uploadRes = await fetch(
-          `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/briefings-audio/${fileName}`,
-          {
-            method: 'POST',
-            headers: {
-              Authorization: `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY}`,
-              'Content-Type': 'audio/mpeg',
-            },
-            body: audioBlob,
-          }
-        )
-        if (uploadRes.ok) {
-          audioUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/briefings-audio/${fileName}`
-        }
-      } catch {
-        // Audio upload failure is non-fatal — the briefing still plays locally.
-      }
-
-      // 4. Save to history
       await fetch('/api/history', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-drop-token': token },
         body: JSON.stringify({
           script: briefData.script,
           summary: briefData.summary,
-          audioUrl,
+          audioUrl: audioData.audioUrl ?? null,
           voiceStyle: settings.voiceId,
           length: settings.length,
           hostName: settings.hostName,
@@ -222,6 +202,11 @@ export default function HomeTab({ token, settings }: HomeTabProps) {
   const busy = step === 'briefing' || step === 'audio' || step === 'saving' || step === 'thesis'
   const canGenerate =
     (videos.some(v => v.status === 'ready') || emails.length > 0) && !busy
+
+  // Keep the screen awake for the entire generation pipeline, not just
+  // playback — otherwise the phone can auto-lock mid-generation, which
+  // interrupts in-flight requests and can wipe in-progress UI state.
+  useWakeLock(busy)
 
   return (
     <div className="stack-16">

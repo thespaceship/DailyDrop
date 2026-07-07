@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { fetchWithRetry } from '@/lib/retry'
 import { DEFAULT_VOICE_ID, VOICE_IDS, SECTION_MARKER_PATTERN } from '@/lib/constants'
+import { uploadAudioToStorage } from '@/lib/storage'
 
 export const maxDuration = 180
 
@@ -42,7 +43,14 @@ export async function POST(req: NextRequest) {
       offset += buf.byteLength
     }
 
-    return NextResponse.json({ audio: Buffer.from(combined).toString('base64') })
+    const buffer = Buffer.from(combined)
+
+    // Upload happens server-side so it completes even if the client's phone
+    // locks or the tab backgrounds right after this response is sent — the
+    // browser no longer needs to stay awake for the upload to succeed.
+    const audioUrl = await uploadAudioToStorage(buffer)
+
+    return NextResponse.json({ audio: buffer.toString('base64'), audioUrl })
   } catch (err) {
     console.error('Audio error:', err)
     const message = err instanceof Error ? err.message : 'Failed to generate audio'
