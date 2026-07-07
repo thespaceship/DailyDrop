@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { Shield, Plus, Copy, Check, AlertTriangle } from 'lucide-react'
+import { Shield, Plus, Copy, Check, AlertTriangle, TrendingUp } from 'lucide-react'
 import Logo from '@/components/Logo'
 
 interface AdminUser {
@@ -26,6 +26,9 @@ export default function AdminPage() {
   const [newEmail, setNewEmail] = useState('')
   const [creating, setCreating] = useState(false)
   const [copiedId, setCopiedId] = useState<string | null>(null)
+
+  const [backfilling, setBackfilling] = useState(false)
+  const [backfillResult, setBackfillResult] = useState('')
 
   const authHeaders = useCallback(
     (): Record<string, string> => ({
@@ -131,6 +134,34 @@ export default function AdminPage() {
     }
   }
 
+  async function backfillThesis() {
+    if (backfilling) return
+    if (
+      !window.confirm(
+        'This reads all past briefings and has Claude build a new thesis version from them. It may take a minute or two. Continue?'
+      )
+    ) {
+      return
+    }
+    setBackfilling(true)
+    setBackfillResult('')
+    setError('')
+    try {
+      const res = await fetch('/api/admin/backfill-thesis', {
+        method: 'POST',
+        headers: authHeaders(),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Failed to backfill thesis')
+      setBackfillResult(
+        `Done — built thesis v${data.thesis.version} from ${data.briefingsUsed} past briefing${data.briefingsUsed === 1 ? '' : 's'}.`
+      )
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to backfill thesis')
+    }
+    setBackfilling(false)
+  }
+
   function copyLink(user: AdminUser) {
     const url = `${window.location.origin}/drop/${user.token}`
     navigator.clipboard.writeText(url).then(() => {
@@ -210,6 +241,35 @@ export default function AdminPage() {
               {subscriptionsEnforced ? 'Turn off' : 'Turn on'}
             </button>
           </div>
+        </section>
+
+        <section className="card">
+          <div className="section-head">
+            <span className="section-title">
+              <TrendingUp size={15} />
+              Backfill thesis from history
+            </span>
+          </div>
+          <p className="hint" style={{ marginBottom: 12 }}>
+            If briefings exist from before the thesis feature was added, this reads all of them
+            and builds a thesis version from that history in one pass, instead of waiting for it
+            to build up only from new briefings going forward. Safe to run once; running it again
+            later just adds another version on top of whatever exists at the time.
+          </p>
+          <button className="btn btn-ghost btn-block" onClick={backfillThesis} disabled={backfilling}>
+            {backfilling ? (
+              <>
+                <span className="spinner spinner-accent" /> Building thesis from history...
+              </>
+            ) : (
+              'Build thesis from past briefings'
+            )}
+          </button>
+          {backfillResult && (
+            <p className="hint" style={{ marginTop: 10, color: 'var(--success)' }}>
+              {backfillResult}
+            </p>
+          )}
         </section>
 
         <section className="card">
