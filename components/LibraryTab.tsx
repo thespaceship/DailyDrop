@@ -4,7 +4,11 @@ import { useEffect, useState } from 'react'
 import { Library, Plus, Trash2, AlertTriangle } from 'lucide-react'
 import type { LibraryDocument } from '@/lib/types'
 
-export default function LibraryTab() {
+interface LibraryTabProps {
+  token: string
+}
+
+export default function LibraryTab({ token }: LibraryTabProps) {
   const [documents, setDocuments] = useState<LibraryDocument[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -21,7 +25,7 @@ export default function LibraryTab() {
   async function loadDocuments() {
     setLoading(true)
     try {
-      const res = await fetch('/api/library')
+      const res = await fetch('/api/library', { headers: { 'x-drop-token': token } })
       const data = await res.json()
       setDocuments(data.documents || [])
       if (data.error) setError(data.error)
@@ -38,7 +42,7 @@ export default function LibraryTab() {
     try {
       const res = await fetch('/api/library', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'x-drop-token': token },
         body: JSON.stringify({ title, content }),
       })
       const data = await res.json()
@@ -58,7 +62,7 @@ export default function LibraryTab() {
     try {
       const res = await fetch('/api/library', {
         method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'x-drop-token': token },
         body: JSON.stringify({ id }),
       })
       if (res.ok) setDocuments(prev => prev.filter(d => d.id !== id))

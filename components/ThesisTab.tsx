@@ -5,13 +5,17 @@ import { TrendingUp } from 'lucide-react'
 import ScriptView from './ScriptView'
 import type { Thesis } from '@/lib/types'
 
-export default function ThesisTab() {
+interface ThesisTabProps {
+  token: string
+}
+
+export default function ThesisTab({ token }: ThesisTabProps) {
   const [thesis, setThesis] = useState<Thesis | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
   useEffect(() => {
-    fetch('/api/thesis')
+    fetch('/api/thesis', { headers: { 'x-drop-token': token } })
       .then(res => res.json())
       .then(data => {
         if (data.error) setError(data.error)
@@ -19,7 +23,7 @@ export default function ThesisTab() {
       })
       .catch(() => setError('Could not load the thesis'))
       .finally(() => setLoading(false))
-  }, [])
+  }, [token])
 
   return (
     <div className="stack-16">

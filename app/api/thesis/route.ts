@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { callClaude } from '@/lib/claude'
 import { sbInsert, sbTrySelect } from '@/lib/supabase'
+import { isValidOwnerToken, ownerFromRequest } from '@/lib/owner'
 
 export const maxDuration = 120
 
@@ -11,11 +12,16 @@ interface ThesisRow {
   version: number
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
+    const owner = ownerFromRequest(req)
+    if (!owner) {
+      return NextResponse.json({ error: 'Missing access token', thesis: null }, { status: 401 })
+    }
+
     const rows = await sbTrySelect<ThesisRow>(
       'investment_thesis',
-      'select=id,updated_at,content,version&order=version.desc&limit=1'
+      `owner=eq.${encodeURIComponent(owner)}&select=id,updated_at,content,version&order=version.desc&limit=1`
     )
     return NextResponse.json({ thesis: rows[0] ?? null })
   } catch (err) {
@@ -26,6 +32,11 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   try {
+    const owner = ownerFromRequest(req)
+    if (!owner || !(await isValidOwnerToken(owner))) {
+      return NextResponse.json({ error: 'Invalid access token' }, { status: 401 })
+    }
+
     const { insights } = await req.json()
 
     if (!insights || typeof insights !== 'string') {
@@ -35,7 +46,7 @@ export async function POST(req: NextRequest) {
     const current = (
       await sbTrySelect<ThesisRow>(
         'investment_thesis',
-        'select=content,version&order=version.desc&limit=1'
+        `owner=eq.${encodeURIComponent(owner)}&select=content,version&order=version.desc&limit=1`
       )
     )[0]
 
@@ -61,6 +72,7 @@ Output the complete updated thesis document. Output only the thesis itself — n
     const version = (current?.version ?? 0) + 1
 
     const inserted = await sbInsert<ThesisRow>('investment_thesis', {
+      owner,
       content,
       version,
       updated_at: new Date().toISOString(),

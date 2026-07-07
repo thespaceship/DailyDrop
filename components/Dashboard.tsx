@@ -57,9 +57,9 @@ export default function Dashboard({ token }: DashboardProps) {
       <main className="content">
         <ErrorBoundary>
           {tab === 'home' && <HomeTab token={token} settings={settings} />}
-          {tab === 'thesis' && <ThesisTab />}
-          {tab === 'library' && <LibraryTab />}
-          {tab === 'history' && <HistoryTab />}
+          {tab === 'thesis' && <ThesisTab token={token} />}
+          {tab === 'library' && <LibraryTab token={token} />}
+          {tab === 'history' && <HistoryTab token={token} />}
           {tab === 'settings' && <SettingsTab settings={settings} onSave={saveSettings} />}
         </ErrorBoundary>
       </main>

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { sbDelete, sbInsert, sbSelect } from '@/lib/supabase'
+import { isValidOwnerToken, ownerFromRequest } from '@/lib/owner'
 
 interface BriefingRow {
   id: string
@@ -14,22 +15,17 @@ interface BriefingRow {
   email_senders: string[] | null
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
-    // `summary` is a new column — fall back to the legacy column set if the
-    // migration has not been run yet.
-    let briefings: BriefingRow[]
-    try {
-      briefings = await sbSelect<BriefingRow>(
-        'briefings',
-        'select=id,created_at,script,summary,audio_url,voice_style,length,host_name,video_urls,email_senders&order=created_at.desc&limit=30'
-      )
-    } catch {
-      briefings = await sbSelect<BriefingRow>(
-        'briefings',
-        'select=id,created_at,script,audio_url,voice_style,length,host_name,video_urls,email_senders&order=created_at.desc&limit=30'
-      )
+    const owner = ownerFromRequest(req)
+    if (!owner) {
+      return NextResponse.json({ error: 'Missing access token', briefings: [] }, { status: 401 })
     }
+
+    const briefings = await sbSelect<BriefingRow>(
+      'briefings',
+      `owner=eq.${encodeURIComponent(owner)}&select=id,created_at,script,summary,audio_url,voice_style,length,host_name,video_urls,email_senders&order=created_at.desc&limit=30`
+    )
     return NextResponse.json({ briefings })
   } catch (err) {
     console.error('Fetch history error:', err)
@@ -40,35 +36,28 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   try {
+    const owner = ownerFromRequest(req)
+    if (!owner || !(await isValidOwnerToken(owner))) {
+      return NextResponse.json({ error: 'Invalid access token' }, { status: 401 })
+    }
+
     const body = await req.json()
 
     if (!body.script) {
       return NextResponse.json({ error: 'No script provided' }, { status: 400 })
     }
 
-    const row: Record<string, unknown> = {
+    const inserted = await sbInsert<{ id: string }>('briefings', {
+      owner,
       script: body.script,
+      summary: body.summary ?? null,
       audio_url: body.audioUrl ?? null,
       voice_style: body.voiceStyle ?? null,
       length: body.length ?? null,
       host_name: body.hostName ?? null,
       video_urls: body.videoUrls ?? [],
       email_senders: body.emailSenders ?? [],
-    }
-    if (body.summary) row.summary = body.summary
-
-    let inserted
-    try {
-      inserted = await sbInsert<{ id: string }>('briefings', row)
-    } catch (err) {
-      // Retry without `summary` in case the column migration has not run yet.
-      if (row.summary) {
-        delete row.summary
-        inserted = await sbInsert<{ id: string }>('briefings', row)
-      } else {
-        throw err
-      }
-    }
+    })
 
     return NextResponse.json({ id: inserted[0]?.id })
   } catch (err) {
@@ -80,12 +69,21 @@ export async function POST(req: NextRequest) {
 
 export async function DELETE(req: NextRequest) {
   try {
+    const owner = ownerFromRequest(req)
+    if (!owner) {
+      return NextResponse.json({ error: 'Missing access token' }, { status: 401 })
+    }
+
     const { id } = await req.json()
     if (!id) {
       return NextResponse.json({ error: 'No id provided' }, { status: 400 })
     }
 
-    await sbDelete('briefings', `id=eq.${encodeURIComponent(id)}`)
+    // Owner filter ensures one account can never delete another's briefings.
+    await sbDelete(
+      'briefings',
+      `id=eq.${encodeURIComponent(id)}&owner=eq.${encodeURIComponent(owner)}`
+    )
     return NextResponse.json({ success: true })
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to delete briefing'

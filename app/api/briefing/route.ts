@@ -7,6 +7,7 @@ import {
   LENGTH_MAX_TOKENS,
   LENGTH_TARGETS,
 } from '@/lib/constants'
+import { ownerFromRequest } from '@/lib/owner'
 
 export const maxDuration = 180
 
@@ -56,17 +57,22 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // Daily consolidation context — each fetch degrades gracefully if the
-    // table or column does not exist yet.
+    // Daily consolidation context, scoped to this account's own data —
+    // each fetch degrades gracefully if unavailable.
+    const owner = ownerFromRequest(req)
+    const ownerFilter = owner ? `owner=eq.${encodeURIComponent(owner)}&` : 'owner=is.null&'
     const [recentBriefings, thesisRows, libraryRows] = await Promise.all([
       sbTrySelect<BriefingSummaryRow>(
         'briefings',
-        'select=created_at,summary&order=created_at.desc&limit=3'
+        `${ownerFilter}select=created_at,summary&order=created_at.desc&limit=3`
       ),
-      sbTrySelect<ThesisRow>('investment_thesis', 'select=content&order=version.desc&limit=1'),
+      sbTrySelect<ThesisRow>(
+        'investment_thesis',
+        `${ownerFilter}select=content&order=version.desc&limit=1`
+      ),
       sbTrySelect<LibraryRow>(
         'knowledge_library',
-        'select=title,summary&order=created_at.desc&limit=25'
+        `${ownerFilter}select=title,summary&order=created_at.desc&limit=25`
       ),
     ])
 

@@ -130,7 +130,7 @@ export default function HomeTab({ token, settings }: HomeTabProps) {
       // 1. Generate the briefing script (with consolidation context server-side)
       const briefRes = await fetch('/api/briefing', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'x-drop-token': token },
         body: JSON.stringify({
           videos: videos.map(v => ({ url: v.url, transcript: v.transcript })),
           emails,
@@ -183,7 +183,7 @@ export default function HomeTab({ token, settings }: HomeTabProps) {
       // 4. Save to history
       await fetch('/api/history', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'x-drop-token': token },
         body: JSON.stringify({
           script: briefData.script,
           summary: briefData.summary,
@@ -201,7 +201,7 @@ export default function HomeTab({ token, settings }: HomeTabProps) {
       try {
         const thesisRes = await fetch('/api/thesis', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', 'x-drop-token': token },
           body: JSON.stringify({ insights: briefData.summary || briefData.script }),
         })
         if (!thesisRes.ok) {

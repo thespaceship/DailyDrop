@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { callClaude } from '@/lib/claude'
 import { sbDelete, sbInsert, sbSelect } from '@/lib/supabase'
+import { isValidOwnerToken, ownerFromRequest } from '@/lib/owner'
 
 export const maxDuration = 60
 
@@ -13,11 +14,16 @@ interface LibraryRow {
   summary: string | null
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
+    const owner = ownerFromRequest(req)
+    if (!owner) {
+      return NextResponse.json({ error: 'Missing access token', documents: [] }, { status: 401 })
+    }
+
     const documents = await sbSelect<LibraryRow>(
       'knowledge_library',
-      'select=id,created_at,title,summary&order=created_at.desc'
+      `owner=eq.${encodeURIComponent(owner)}&select=id,created_at,title,summary&order=created_at.desc`
     )
     return NextResponse.json({ documents })
   } catch (err) {
@@ -28,6 +34,11 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   try {
+    const owner = ownerFromRequest(req)
+    if (!owner || !(await isValidOwnerToken(owner))) {
+      return NextResponse.json({ error: 'Invalid access token' }, { status: 401 })
+    }
+
     const { title, content } = await req.json()
 
     if (!title || typeof title !== 'string' || !title.trim()) {
@@ -53,6 +64,7 @@ ${trimmed.slice(0, 30_000)}`,
     )
 
     const inserted = await sbInsert<LibraryRow>('knowledge_library', {
+      owner,
       title: title.trim(),
       content: trimmed,
       summary: summary.trim(),
@@ -68,12 +80,21 @@ ${trimmed.slice(0, 30_000)}`,
 
 export async function DELETE(req: NextRequest) {
   try {
+    const owner = ownerFromRequest(req)
+    if (!owner) {
+      return NextResponse.json({ error: 'Missing access token' }, { status: 401 })
+    }
+
     const { id } = await req.json()
     if (!id) {
       return NextResponse.json({ error: 'No id provided' }, { status: 400 })
     }
 
-    await sbDelete('knowledge_library', `id=eq.${encodeURIComponent(id)}`)
+    // Owner filter ensures one account can never delete another's documents.
+    await sbDelete(
+      'knowledge_library',
+      `id=eq.${encodeURIComponent(id)}&owner=eq.${encodeURIComponent(owner)}`
+    )
     return NextResponse.json({ success: true })
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to delete document'

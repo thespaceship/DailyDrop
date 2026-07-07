@@ -30,9 +30,17 @@ export async function POST(req: NextRequest) {
   if (denied) return denied
 
   try {
+    // Scope to one account. Defaults to the legacy shared token, which owns
+    // all pre-migration briefings.
+    const body = await req.json().catch(() => ({}))
+    const owner: string =
+      typeof body.ownerToken === 'string' && body.ownerToken
+        ? body.ownerToken
+        : process.env.SECRET_ACCESS_TOKEN!
+
     const briefings = await sbSelect<BriefingRow>(
       'briefings',
-      `select=created_at,script,summary&order=created_at.asc&limit=${MAX_BRIEFINGS}`
+      `owner=eq.${encodeURIComponent(owner)}&select=created_at,script,summary&order=created_at.asc&limit=${MAX_BRIEFINGS}`
     )
 
     const usable = briefings.filter(b => b.summary || b.script)
@@ -46,7 +54,7 @@ export async function POST(req: NextRequest) {
     const current = (
       await sbTrySelect<ThesisRow>(
         'investment_thesis',
-        'select=content,version&order=version.desc&limit=1'
+        `owner=eq.${encodeURIComponent(owner)}&select=content,version&order=version.desc&limit=1`
       )
     )[0]
 
@@ -81,6 +89,7 @@ Output only the complete thesis document — no preamble, no commentary, no ment
     const version = (current?.version ?? 0) + 1
 
     const inserted = await sbInsert<{ id: string; version: number }>('investment_thesis', {
+      owner,
       content,
       version,
       updated_at: new Date().toISOString(),

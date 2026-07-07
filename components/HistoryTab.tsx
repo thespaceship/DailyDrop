@@ -8,7 +8,11 @@ import type { Briefing } from '@/lib/types'
 
 const PINNED_COUNT = 2
 
-export default function HistoryTab() {
+interface HistoryTabProps {
+  token: string
+}
+
+export default function HistoryTab({ token }: HistoryTabProps) {
   const [briefings, setBriefings] = useState<Briefing[]>([])
   const [loading, setLoading] = useState(true)
   const [showPrevious, setShowPrevious] = useState(false)
@@ -16,19 +20,19 @@ export default function HistoryTab() {
   const [scriptId, setScriptId] = useState<string | null>(null)
 
   useEffect(() => {
-    fetch('/api/history')
+    fetch('/api/history', { headers: { 'x-drop-token': token } })
       .then(res => res.json())
       .then(data => setBriefings(data.briefings || []))
       .catch(() => setBriefings([]))
       .finally(() => setLoading(false))
-  }, [])
+  }, [token])
 
   async function deleteBriefing(id: string) {
     if (!window.confirm('Delete this briefing?')) return
     try {
       const res = await fetch('/api/history', {
         method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'x-drop-token': token },
         body: JSON.stringify({ id }),
       })
       if (res.ok) setBriefings(prev => prev.filter(b => b.id !== id))
