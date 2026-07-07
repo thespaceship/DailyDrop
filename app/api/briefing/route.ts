@@ -8,6 +8,7 @@ import {
   LENGTH_TARGETS,
 } from '@/lib/constants'
 import { ownerFromRequest } from '@/lib/owner'
+import { claudeCost } from '@/lib/pricing'
 
 export const maxDuration = 180
 
@@ -87,10 +88,10 @@ export async function POST(req: NextRequest) {
       library: libraryRows,
     })
 
-    const raw = await callClaude(prompt, LENGTH_MAX_TOKENS[length])
-    const { script, summary } = parseResponse(raw)
+    const { text, usage } = await callClaude(prompt, LENGTH_MAX_TOKENS[length])
+    const { script, summary } = parseResponse(text)
 
-    return NextResponse.json({ script, summary })
+    return NextResponse.json({ script, summary, cost: claudeCost(usage) })
   } catch (err) {
     console.error('Briefing error:', err)
     const message = err instanceof Error ? err.message : 'Failed to generate briefing'

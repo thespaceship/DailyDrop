@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { Library, Plus, Trash2, AlertTriangle } from 'lucide-react'
+import { formatCost } from '@/lib/pricing'
 import type { LibraryDocument } from '@/lib/types'
 
 interface LibraryTabProps {
@@ -17,6 +18,7 @@ export default function LibraryTab({ token }: LibraryTabProps) {
   const [title, setTitle] = useState('')
   const [content, setContent] = useState('')
   const [saving, setSaving] = useState(false)
+  const [lastAddedCost, setLastAddedCost] = useState<number | null>(null)
 
   useEffect(() => {
     loadDocuments()
@@ -48,6 +50,7 @@ export default function LibraryTab({ token }: LibraryTabProps) {
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Failed to add document')
       setDocuments(prev => [data.document, ...prev])
+      setLastAddedCost(typeof data.cost === 'number' ? data.cost : null)
       setTitle('')
       setContent('')
       setShowForm(false)
@@ -141,6 +144,12 @@ export default function LibraryTab({ token }: LibraryTabProps) {
             <AlertTriangle size={16} style={{ flexShrink: 0, marginTop: 1 }} />
             {error}
           </div>
+        )}
+
+        {lastAddedCost !== null && (
+          <p className="meta-line" style={{ marginTop: 12 }}>
+            Last summary cost: {formatCost(lastAddedCost)}
+          </p>
         )}
       </section>
 

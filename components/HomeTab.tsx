@@ -1,13 +1,32 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Youtube, Mail, X, AlertTriangle, Headphones, FileText, RefreshCw, Play } from 'lucide-react'
+import {
+  Youtube,
+  Mail,
+  X,
+  AlertTriangle,
+  Headphones,
+  FileText,
+  RefreshCw,
+  Play,
+  DollarSign,
+} from 'lucide-react'
 import AudioPlayer from './AudioPlayer'
 import ScriptView from './ScriptView'
 import { useWakeLock } from '@/lib/useWakeLock'
+import { ttsCost, formatCost } from '@/lib/pricing'
 import type { EmailItem, UserSettings, VideoItem } from '@/lib/types'
 
-type Step = 'idle' | 'briefing' | 'audio' | 'saving' | 'thesis' | 'done' | 'error'
+type Step =
+  | 'idle'
+  | 'briefing'
+  | 'awaiting-audio-decision'
+  | 'audio'
+  | 'saving'
+  | 'thesis'
+  | 'done'
+  | 'error'
 
 const STEP_LABELS: Record<string, string> = {
   briefing: 'Writing your briefing...',
@@ -30,10 +49,15 @@ export default function HomeTab({ token, settings }: HomeTabProps) {
 
   const [step, setStep] = useState<Step>('idle')
   const [script, setScript] = useState('')
+  const [summary, setSummary] = useState('')
   const [audioSrc, setAudioSrc] = useState<string | null>(null)
   const [errorMsg, setErrorMsg] = useState('')
   const [thesisNote, setThesisNote] = useState('')
   const [showScript, setShowScript] = useState(false)
+
+  const [textCost, setTextCost] = useState<number | null>(null)
+  const [audioCost, setAudioCost] = useState<number | null>(null)
+  const [thesisCost, setThesisCost] = useState<number | null>(null)
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
@@ -122,10 +146,14 @@ export default function HomeTab({ token, settings }: HomeTabProps) {
   async function generate() {
     setStep('briefing')
     setScript('')
+    setSummary('')
     setAudioSrc(null)
     setErrorMsg('')
     setThesisNote('')
     setShowScript(false)
+    setTextCost(null)
+    setAudioCost(null)
+    setThesisCost(null)
 
     try {
       // 1. Generate the briefing script (with consolidation context server-side)
@@ -142,32 +170,60 @@ export default function HomeTab({ token, settings }: HomeTabProps) {
       })
       const briefData = await briefRes.json()
       if (!briefRes.ok) throw new Error(briefData.error || 'Script generation failed')
-      setScript(briefData.script)
 
-      // 2. Convert to audio
-      setStep('audio')
+      setScript(briefData.script)
+      setSummary(briefData.summary || '')
+      setTextCost(typeof briefData.cost === 'number' ? briefData.cost : null)
+
+      // Pause here — audio generation has a real, known-in-advance cost
+      // (deterministic from character count), so the user decides whether
+      // to spend it rather than it happening automatically.
+      setStep('awaiting-audio-decision')
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : 'Something went wrong')
+      setStep('error')
+    }
+  }
+
+  async function generateAudioAndFinish() {
+    setStep('audio')
+    try {
       const audioRes = await fetch('/api/audio', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ script: briefData.script, voiceId: settings.voiceId }),
+        headers: { 'Content-Type': 'application/json', 'x-drop-token': token },
+        body: JSON.stringify({ script, voiceId: settings.voiceId }),
       })
       const audioData = await audioRes.json()
       if (!audioRes.ok) throw new Error(audioData.error || 'Audio generation failed')
 
-      const src = `data:audio/mpeg;base64,${audioData.audio}`
-      setAudioSrc(src)
+      setAudioSrc(`data:audio/mpeg;base64,${audioData.audio}`)
+      setAudioCost(typeof audioData.cost === 'number' ? audioData.cost : null)
 
-      // 3. Save to history. The audio was already uploaded to Supabase
-      // Storage server-side (inside /api/audio), so this doesn't depend on
-      // the phone staying awake or the tab staying foregrounded.
+      await finishGeneration(audioData.audioUrl ?? null)
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : 'Something went wrong')
+      setStep('error')
+    }
+  }
+
+  async function skipAudioAndFinish() {
+    await finishGeneration(null)
+  }
+
+  /** Saves the briefing to history and updates the thesis. Audio is optional. */
+  async function finishGeneration(audioUrl: string | null) {
+    try {
+      // Save to history. If audio was generated, it was already uploaded to
+      // Supabase Storage server-side (inside /api/audio), so this doesn't
+      // depend on the phone staying awake or the tab staying foregrounded.
       setStep('saving')
       await fetch('/api/history', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-drop-token': token },
         body: JSON.stringify({
-          script: briefData.script,
-          summary: briefData.summary,
-          audioUrl: audioData.audioUrl ?? null,
+          script,
+          summary,
+          audioUrl,
           voiceStyle: settings.voiceId,
           length: settings.length,
           hostName: settings.hostName,
@@ -176,17 +232,19 @@ export default function HomeTab({ token, settings }: HomeTabProps) {
         }),
       })
 
-      // 5. Update the evolving investment thesis (non-fatal)
+      // Update the evolving investment thesis (non-fatal)
       setStep('thesis')
       try {
         const thesisRes = await fetch('/api/thesis', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'x-drop-token': token },
-          body: JSON.stringify({ insights: briefData.summary || briefData.script }),
+          body: JSON.stringify({ insights: summary || script }),
         })
+        const thesisData = await thesisRes.json().catch(() => ({}))
         if (!thesisRes.ok) {
-          const thesisData = await thesisRes.json().catch(() => ({}))
           setThesisNote(thesisData.error || 'Thesis update failed — the briefing itself was saved.')
+        } else if (typeof thesisData.cost === 'number') {
+          setThesisCost(thesisData.cost)
         }
       } catch {
         setThesisNote('Thesis update failed — the briefing itself was saved.')
@@ -199,14 +257,20 @@ export default function HomeTab({ token, settings }: HomeTabProps) {
     }
   }
 
-  const busy = step === 'briefing' || step === 'audio' || step === 'saving' || step === 'thesis'
-  const canGenerate =
-    (videos.some(v => v.status === 'ready') || emails.length > 0) && !busy
+  const busy =
+    step === 'briefing' ||
+    step === 'awaiting-audio-decision' ||
+    step === 'audio' ||
+    step === 'saving' ||
+    step === 'thesis'
+  const canGenerate = (videos.some(v => v.status === 'ready') || emails.length > 0) && !busy
 
   // Keep the screen awake for the entire generation pipeline, not just
   // playback — otherwise the phone can auto-lock mid-generation, which
   // interrupts in-flight requests and can wipe in-progress UI state.
   useWakeLock(busy)
+
+  const estimatedAudioCost = script ? ttsCost(script) : 0
 
   return (
     <div className="stack-16">
@@ -305,21 +369,53 @@ export default function HomeTab({ token, settings }: HomeTabProps) {
         )}
       </section>
 
-      <button className="btn btn-primary btn-block" onClick={generate} disabled={!canGenerate}>
-        {busy ? (
-          <>
-            <span className="spinner" /> {STEP_LABELS[step]}
-          </>
-        ) : step === 'done' ? (
-          <>
-            <RefreshCw size={16} /> Regenerate
-          </>
-        ) : (
-          <>
-            <Play size={16} /> Generate today&apos;s briefing
-          </>
-        )}
-      </button>
+      {step !== 'awaiting-audio-decision' && (
+        <button className="btn btn-primary btn-block" onClick={generate} disabled={!canGenerate}>
+          {busy ? (
+            <>
+              <span className="spinner" /> {STEP_LABELS[step] || 'Working...'}
+            </>
+          ) : step === 'done' ? (
+            <>
+              <RefreshCw size={16} /> Regenerate
+            </>
+          ) : (
+            <>
+              <Play size={16} /> Generate today&apos;s briefing
+            </>
+          )}
+        </button>
+      )}
+
+      {step === 'awaiting-audio-decision' && (
+        <section className="card">
+          <div className="section-head">
+            <span className="section-title">
+              <FileText size={15} />
+              Script ready
+            </span>
+            {textCost !== null && (
+              <span className="badge mono">
+                <DollarSign size={11} style={{ marginRight: 1 }} />
+                {formatCost(textCost)}
+              </span>
+            )}
+          </div>
+          <p className="hint" style={{ marginBottom: 14 }}>
+            Generating audio will cost approximately{' '}
+            <strong style={{ color: 'var(--text-primary)' }}>{formatCost(estimatedAudioCost)}</strong>{' '}
+            based on today&apos;s script length. This is spent only if you choose to generate audio.
+          </p>
+          <div className="stack-8">
+            <button className="btn btn-primary btn-block" onClick={generateAudioAndFinish}>
+              <Headphones size={16} /> Generate audio — {formatCost(estimatedAudioCost)}
+            </button>
+            <button className="btn btn-ghost btn-block" onClick={skipAudioAndFinish}>
+              Skip audio, keep text only
+            </button>
+          </div>
+        </section>
+      )}
 
       {step === 'error' && (
         <div className="error-box">
@@ -328,7 +424,18 @@ export default function HomeTab({ token, settings }: HomeTabProps) {
         </div>
       )}
 
-      {thesisNote && step === 'done' && <div className="notice-box">{thesisNote}</div>}
+      {step === 'done' && (
+        <div className="notice-box">
+          {thesisNote ? (
+            thesisNote
+          ) : (
+            <>
+              Thesis updated
+              {thesisCost !== null && <> · cost {formatCost(thesisCost)}</>}
+            </>
+          )}
+        </div>
+      )}
 
       {audioSrc && (
         <section className="card">
@@ -344,6 +451,11 @@ export default function HomeTab({ token, settings }: HomeTabProps) {
             downloadName={`dailydrop-${new Date().toISOString().slice(0, 10)}.mp3`}
             title={`DailyDrop — ${new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}`}
           />
+          {audioCost !== null && (
+            <p className="meta-line" style={{ marginTop: 10 }}>
+              Audio cost: {formatCost(audioCost)}
+            </p>
+          )}
         </section>
       )}
 

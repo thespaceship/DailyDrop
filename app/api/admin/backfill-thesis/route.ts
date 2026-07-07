@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireAdmin } from '@/lib/adminAuth'
 import { callClaude } from '@/lib/claude'
 import { sbInsert, sbSelect, sbTrySelect } from '@/lib/supabase'
+import { claudeCost } from '@/lib/pricing'
 
 export const maxDuration = 180
 
@@ -82,15 +83,17 @@ Synthesize this history into a single investment thesis document. The thesis sho
 - Maintain a clear current market outlook as of the most recent entry
 - Include specific sector and asset class views
 - Not simply restate old news — synthesize what it means going forward
+- Stay within roughly 800-1000 words — consolidate and prioritize the most
+  important recurring themes rather than trying to cover everything
 
 Output only the complete thesis document — no preamble, no commentary, no mention that this was built from historical backfill.`
 
-    const content = await callClaude(prompt, 6000)
+    const { text, usage } = await callClaude(prompt, 3000)
     const version = (current?.version ?? 0) + 1
 
     const inserted = await sbInsert<{ id: string; version: number }>('investment_thesis', {
       owner,
-      content,
+      content: text,
       version,
       updated_at: new Date().toISOString(),
     })
@@ -98,6 +101,7 @@ Output only the complete thesis document — no preamble, no commentary, no ment
     return NextResponse.json({
       thesis: inserted[0],
       briefingsUsed: usable.length,
+      cost: claudeCost(usage),
     })
   } catch (err) {
     console.error('Thesis backfill error:', err)

@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { TrendingUp, Headphones, AlertTriangle } from 'lucide-react'
 import ScriptView from './ScriptView'
 import AudioPlayer from './AudioPlayer'
+import { ttsCost, formatCost } from '@/lib/pricing'
 import type { Thesis, UserSettings } from '@/lib/types'
 
 interface ThesisTabProps {
@@ -16,7 +17,9 @@ export default function ThesisTab({ token, settings }: ThesisTabProps) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
+  const [confirming, setConfirming] = useState(false)
   const [audioSrc, setAudioSrc] = useState<string | null>(null)
+  const [audioCost, setAudioCost] = useState<number | null>(null)
   const [generatingAudio, setGeneratingAudio] = useState(false)
   const [audioError, setAudioError] = useState('')
 
@@ -34,6 +37,7 @@ export default function ThesisTab({ token, settings }: ThesisTabProps) {
   async function generateAudio() {
     if (!thesis || generatingAudio) return
     setGeneratingAudio(true)
+    setConfirming(false)
     setAudioError('')
     try {
       const res = await fetch('/api/audio', {
@@ -44,11 +48,14 @@ export default function ThesisTab({ token, settings }: ThesisTabProps) {
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Audio generation failed')
       setAudioSrc(`data:audio/mpeg;base64,${data.audio}`)
+      setAudioCost(typeof data.cost === 'number' ? data.cost : null)
     } catch (err) {
       setAudioError(err instanceof Error ? err.message : 'Audio generation failed')
     }
     setGeneratingAudio(false)
   }
+
+  const estimatedCost = thesis ? ttsCost(thesis.content) : 0
 
   return (
     <div className="stack-16">
@@ -83,11 +90,29 @@ export default function ThesisTab({ token, settings }: ThesisTabProps) {
                   downloadName={`dailydrop-thesis-v${thesis.version}.mp3`}
                   title={`DailyDrop Thesis — v${thesis.version}`}
                 />
+                {audioCost !== null && (
+                  <p className="meta-line" style={{ marginTop: 10 }}>
+                    Audio cost: {formatCost(audioCost)}
+                  </p>
+                )}
+              </div>
+            ) : confirming ? (
+              <div className="stack-8" style={{ marginBottom: 16 }}>
+                <p className="hint">
+                  Generating audio for this thesis will cost approximately{' '}
+                  <strong style={{ color: 'var(--text-primary)' }}>{formatCost(estimatedCost)}</strong>.
+                </p>
+                <button className="btn btn-primary btn-block" onClick={generateAudio}>
+                  <Headphones size={16} /> Confirm — generate for {formatCost(estimatedCost)}
+                </button>
+                <button className="btn btn-ghost btn-block" onClick={() => setConfirming(false)}>
+                  Cancel
+                </button>
               </div>
             ) : (
               <button
                 className="btn btn-ghost btn-block"
-                onClick={generateAudio}
+                onClick={() => setConfirming(true)}
                 disabled={generatingAudio}
                 style={{ marginBottom: 16 }}
               >
@@ -97,7 +122,7 @@ export default function ThesisTab({ token, settings }: ThesisTabProps) {
                   </>
                 ) : (
                   <>
-                    <Headphones size={16} /> Listen to this thesis
+                    <Headphones size={16} /> Listen to this thesis — {formatCost(estimatedCost)}
                   </>
                 )}
               </button>

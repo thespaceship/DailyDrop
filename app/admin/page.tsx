@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Shield, Plus, Copy, Check, AlertTriangle, TrendingUp } from 'lucide-react'
 import Logo from '@/components/Logo'
+import { formatCost } from '@/lib/pricing'
 
 interface AdminUser {
   id: string
@@ -153,8 +154,9 @@ export default function AdminPage() {
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Failed to backfill thesis')
+      const costNote = typeof data.cost === 'number' ? ` · cost ${formatCost(data.cost)}` : ''
       setBackfillResult(
-        `Done — built thesis v${data.thesis.version} from ${data.briefingsUsed} past briefing${data.briefingsUsed === 1 ? '' : 's'}.`
+        `Done — built thesis v${data.thesis.version} from ${data.briefingsUsed} past briefing${data.briefingsUsed === 1 ? '' : 's'}${costNote}.`
       )
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to backfill thesis')

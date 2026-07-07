@@ -1,13 +1,19 @@
 import { fetchWithRetry } from './retry'
 import { CLAUDE_MODEL } from './constants'
+import type { ClaudeUsage } from './pricing'
 
 interface ClaudeContentBlock {
   type: string
   text?: string
 }
 
-/** Call the Anthropic Messages API and return the plain-text response. */
-export async function callClaude(prompt: string, maxTokens = 8000): Promise<string> {
+export interface ClaudeResult {
+  text: string
+  usage: ClaudeUsage
+}
+
+/** Call the Anthropic Messages API and return the text plus token usage. */
+export async function callClaude(prompt: string, maxTokens = 8000): Promise<ClaudeResult> {
   const apiKey = process.env.ANTHROPIC_API_KEY
   if (!apiKey) throw new Error('ANTHROPIC_API_KEY is not set')
 
@@ -39,5 +45,12 @@ export async function callClaude(prompt: string, maxTokens = 8000): Promise<stri
     .join('')
 
   if (!text) throw new Error('Claude returned an empty response')
-  return text
+
+  return {
+    text,
+    usage: {
+      inputTokens: data.usage?.input_tokens ?? 0,
+      outputTokens: data.usage?.output_tokens ?? 0,
+    },
+  }
 }

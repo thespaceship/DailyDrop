@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { callClaude } from '@/lib/claude'
 import { sbDelete, sbInsert, sbSelect } from '@/lib/supabase'
 import { isValidOwnerToken, ownerFromRequest } from '@/lib/owner'
+import { claudeCost } from '@/lib/pricing'
 
 export const maxDuration = 60
 
@@ -53,7 +54,7 @@ export async function POST(req: NextRequest) {
 
     const trimmed = content.trim().slice(0, MAX_DOCUMENT_CHARS)
 
-    const summary = await callClaude(
+    const { text: summary, usage } = await callClaude(
       `Summarize the following document in roughly 200 words, focused on what matters for investment analysis: key facts, figures, positions, and conclusions. Output only the summary.
 
 TITLE: ${title.trim()}
@@ -70,7 +71,7 @@ ${trimmed.slice(0, 30_000)}`,
       summary: summary.trim(),
     })
 
-    return NextResponse.json({ document: inserted[0] })
+    return NextResponse.json({ document: inserted[0], cost: claudeCost(usage) })
   } catch (err) {
     console.error('Library add error:', err)
     const message = err instanceof Error ? err.message : 'Failed to add document'

@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { fetchWithRetry } from '@/lib/retry'
-import { DEFAULT_VOICE_ID, VOICE_IDS, SECTION_MARKER_PATTERN } from '@/lib/constants'
+import { DEFAULT_VOICE_ID, VOICE_IDS } from '@/lib/constants'
 import { uploadAudioToStorage } from '@/lib/storage'
+import { stripSectionMarkers } from '@/lib/textUtils'
+import { ttsCost } from '@/lib/pricing'
 
 export const maxDuration = 180
 
@@ -50,7 +52,11 @@ export async function POST(req: NextRequest) {
     // browser no longer needs to stay awake for the upload to succeed.
     const audioUrl = await uploadAudioToStorage(buffer)
 
-    return NextResponse.json({ audio: buffer.toString('base64'), audioUrl })
+    return NextResponse.json({
+      audio: buffer.toString('base64'),
+      audioUrl,
+      cost: ttsCost(script),
+    })
   } catch (err) {
     console.error('Audio error:', err)
     const message = err instanceof Error ? err.message : 'Failed to generate audio'
@@ -85,15 +91,6 @@ async function generateChunk(text: string, voice: string): Promise<ArrayBuffer> 
   return res.arrayBuffer()
 }
 
-/** Remove [SECTION NAME] marker lines — they are visual structure, not spoken content. */
-function stripSectionMarkers(script: string): string {
-  return script
-    .split('\n')
-    .filter(line => !SECTION_MARKER_PATTERN.test(line.trim()))
-    .join('\n')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim()
-}
 
 /** Split text into chunks under maxLength, breaking at sentence boundaries. */
 function splitIntoChunks(text: string, maxLength: number): string[] {

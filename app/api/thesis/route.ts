@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { callClaude } from '@/lib/claude'
 import { sbInsert, sbTrySelect } from '@/lib/supabase'
 import { isValidOwnerToken, ownerFromRequest } from '@/lib/owner'
+import { claudeCost } from '@/lib/pricing'
 
 export const maxDuration = 120
 
@@ -65,20 +66,25 @@ Update the investment thesis by integrating today's insights. The thesis should:
 - Maintain a clear current market outlook
 - Include specific sector and asset class views
 - Be written as a professional investment memo, not a list
+- Stay within roughly 800-1000 words. This is a hard target, not a suggestion:
+  actively consolidate or retire positions that are no longer relevant, merge
+  overlapping points, and tighten language rather than letting the document
+  grow indefinitely. A sharper, shorter memo is more valuable than an
+  exhaustive one — do not simply append today's insights to what exists.
 
 Output the complete updated thesis document. Output only the thesis itself — no preamble, no commentary.`
 
-    const content = await callClaude(prompt, 6000)
+    const { text, usage } = await callClaude(prompt, 3000)
     const version = (current?.version ?? 0) + 1
 
     const inserted = await sbInsert<ThesisRow>('investment_thesis', {
       owner,
-      content,
+      content: text,
       version,
       updated_at: new Date().toISOString(),
     })
 
-    return NextResponse.json({ thesis: inserted[0] })
+    return NextResponse.json({ thesis: inserted[0], cost: claudeCost(usage) })
   } catch (err) {
     console.error('Thesis update error:', err)
     const message = err instanceof Error ? err.message : 'Failed to update thesis'
