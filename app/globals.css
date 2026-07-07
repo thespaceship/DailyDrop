@@ -116,10 +116,61 @@ a {
   letter-spacing: -0.04em;
 }
 
+.header-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
 .header-date {
   font-size: 12px;
   color: var(--text-secondary);
   font-family: var(--font-monospace);
+}
+
+/* ---------- Flip clock ---------- */
+
+.flip-clock {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-family: var(--font-monospace);
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1;
+}
+
+.flip-colon {
+  color: var(--text-muted);
+  padding: 0 1px;
+}
+
+.flip-digit {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0.72em;
+  padding: 3px 3px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  color: var(--text-primary);
+  perspective: 120px;
+}
+
+.flip-digit-value {
+  display: inline-block;
+  transform-origin: center bottom;
+  backface-visibility: hidden;
+  transition: transform 0.18s ease-in, opacity 0.18s ease-in;
+}
+
+/* Calm flip: the current number tips back and fades just as the new one
+   settles in. Quick and soft, not a dramatic mechanical flap. */
+.flip-digit.is-flipping .flip-digit-value {
+  transform: rotateX(-90deg);
+  opacity: 0.2;
 }
 
 /* ---------- Bottom tab bar ---------- */
@@ -676,4 +727,105 @@ select option {
 
 .text-danger {
   color: var(--danger);
+}
+
+/* ============================================================
+   Desktop / laptop layout (min-width: 768px)
+   Mobile styling above is untouched; these rules layer on top
+   for wider screens only.
+   ============================================================ */
+
+@media (min-width: 768px) {
+  body {
+    font-size: 15px;
+  }
+
+  /* App breathes into more of the screen, still centered */
+  .app {
+    max-width: 720px;
+  }
+
+  .content {
+    padding: 28px 24px 132px;
+    gap: 24px;
+  }
+
+  /* Header bar spans the full browser; its content aligns with the
+     centered content column below (logo above the first card's left
+     edge, clock above its right edge). */
+  .header-inner {
+    max-width: 720px;
+    padding: 20px 24px;
+  }
+
+  .wordmark {
+    font-size: 20px;
+  }
+
+  .logo-mark svg {
+    width: 22px;
+    height: 22px;
+  }
+
+  .header-meta {
+    gap: 16px;
+  }
+
+  .header-date {
+    font-size: 14px;
+  }
+
+  .flip-clock {
+    font-size: 15px;
+    gap: 3px;
+  }
+
+  .flip-digit {
+    padding: 5px 4px;
+    border-radius: 4px;
+  }
+
+  /* Bottom tab bar: larger and more prominent */
+  .tabbar-inner {
+    max-width: 720px;
+  }
+
+  .tab {
+    padding: 16px 0 14px;
+    gap: 5px;
+  }
+
+  .tab svg {
+    width: 24px;
+    height: 24px;
+  }
+
+  .tab-label {
+    font-size: 12px;
+  }
+
+  /* Cards and input boxes stand out with a lighter tone on desktop */
+  .card {
+    padding: 22px;
+    background: var(--bg-secondary);
+  }
+
+  input,
+  select,
+  textarea {
+    background: #212121;
+    border-color: var(--border-strong);
+    padding: 13px 14px;
+  }
+
+  input::placeholder,
+  textarea::placeholder {
+    color: var(--text-secondary);
+  }
+
+  /* The Connect Gmail prompt box gets the same lifted treatment */
+  .notice-box {
+    background: #212121;
+    border-color: var(--border-strong);
+  }
 }

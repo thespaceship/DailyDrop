@@ -52,18 +52,20 @@ export default function Dashboard({ token }: DashboardProps) {
   }
 
   return (
-    <div className="app">
+    <>
       <Header />
-      <main className="content">
-        <ErrorBoundary>
-          {tab === 'home' && <HomeTab token={token} settings={settings} />}
-          {tab === 'thesis' && <ThesisTab token={token} />}
-          {tab === 'library' && <LibraryTab token={token} />}
-          {tab === 'history' && <HistoryTab token={token} />}
-          {tab === 'settings' && <SettingsTab settings={settings} onSave={saveSettings} />}
-        </ErrorBoundary>
-      </main>
+      <div className="app">
+        <main className="content">
+          <ErrorBoundary>
+            {tab === 'home' && <HomeTab token={token} settings={settings} />}
+            {tab === 'thesis' && <ThesisTab token={token} />}
+            {tab === 'library' && <LibraryTab token={token} />}
+            {tab === 'history' && <HistoryTab token={token} />}
+            {tab === 'settings' && <SettingsTab settings={settings} onSave={saveSettings} />}
+          </ErrorBoundary>
+        </main>
+      </div>
       <TabBar active={tab} onChange={setTab} />
-    </div>
+    </>
   )
 }

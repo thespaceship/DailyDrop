@@ -1,4 +1,5 @@
 import Logo from './Logo'
+import FlipClock from './FlipClock'
 
 export default function Header() {
   const today = new Date().toLocaleDateString('en-US', {
@@ -11,7 +12,10 @@ export default function Header() {
     <header className="header">
       <div className="header-inner">
         <Logo />
-        <span className="header-date">{today}</span>
+        <div className="header-meta">
+          <span className="header-date">{today}</span>
+          <FlipClock />
+        </div>
       </div>
     </header>
   )
