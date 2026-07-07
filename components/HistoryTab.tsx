@@ -104,7 +104,11 @@ export default function HistoryTab({ token }: HistoryTabProps) {
             </p>
           )}
           {b.audio_url ? (
-            <AudioPlayer src={b.audio_url} downloadName={`dailydrop-${b.created_at.slice(0, 10)}.mp3`} />
+            <AudioPlayer
+              src={b.audio_url}
+              downloadName={`dailydrop-${b.created_at.slice(0, 10)}.mp3`}
+              title={`DailyDrop — ${formatDate(b.created_at)}`}
+            />
           ) : (
             <p className="empty-text">No audio saved for this briefing.</p>
           )}
@@ -164,6 +168,7 @@ export default function HistoryTab({ token }: HistoryTabProps) {
                     <AudioPlayer
                       src={b.audio_url}
                       downloadName={`dailydrop-${b.created_at.slice(0, 10)}.mp3`}
+                      title={`DailyDrop — ${formatDate(b.created_at)}`}
                     />
                   </div>
                 )}

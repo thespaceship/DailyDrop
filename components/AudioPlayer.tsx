@@ -7,9 +7,13 @@ import { useWakeLock } from '@/lib/useWakeLock'
 interface AudioPlayerProps {
   src: string
   downloadName?: string
+  /** Shown on the lock screen / notification "now playing" card. */
+  title?: string
 }
 
-export default function AudioPlayer({ src, downloadName }: AudioPlayerProps) {
+const SKIP_SECONDS = 15
+
+export default function AudioPlayer({ src, downloadName, title = 'DailyDrop Briefing' }: AudioPlayerProps) {
   const audioRef = useRef<HTMLAudioElement>(null)
   const [playing, setPlaying] = useState(false)
   const [currentTime, setCurrentTime] = useState(0)
@@ -23,6 +27,49 @@ export default function AudioPlayer({ src, downloadName }: AudioPlayerProps) {
     setCurrentTime(0)
     setDuration(0)
   }, [src])
+
+  // Media Session API: lets audio keep playing when the phone locks, and
+  // shows a proper lock-screen / notification-shade "now playing" card
+  // (title, play/pause, skip) instead of just silently continuing.
+  useEffect(() => {
+    if (!('mediaSession' in navigator)) return
+    const audio = audioRef.current
+
+    navigator.mediaSession.metadata = new MediaMetadata({
+      title,
+      artist: 'DailyDrop',
+      artwork: [
+        { src: '/icon-192.png', sizes: '192x192', type: 'image/png' },
+        { src: '/icon-512.png', sizes: '512x512', type: 'image/png' },
+      ],
+    })
+
+    navigator.mediaSession.setActionHandler('play', () => audio?.play().catch(() => {}))
+    navigator.mediaSession.setActionHandler('pause', () => audio?.pause())
+    navigator.mediaSession.setActionHandler('seekbackward', () => {
+      if (audio) audio.currentTime = Math.max(0, audio.currentTime - SKIP_SECONDS)
+    })
+    navigator.mediaSession.setActionHandler('seekforward', () => {
+      if (audio) audio.currentTime = Math.min(audio.duration || Infinity, audio.currentTime + SKIP_SECONDS)
+    })
+    navigator.mediaSession.setActionHandler('seekto', details => {
+      if (audio && typeof details.seekTime === 'number') audio.currentTime = details.seekTime
+    })
+
+    return () => {
+      navigator.mediaSession.setActionHandler('play', null)
+      navigator.mediaSession.setActionHandler('pause', null)
+      navigator.mediaSession.setActionHandler('seekbackward', null)
+      navigator.mediaSession.setActionHandler('seekforward', null)
+      navigator.mediaSession.setActionHandler('seekto', null)
+    }
+  }, [src, title])
+
+  useEffect(() => {
+    if ('mediaSession' in navigator) {
+      navigator.mediaSession.playbackState = playing ? 'playing' : 'paused'
+    }
+  }, [playing])
 
   function togglePlay() {
     const audio = audioRef.current
@@ -57,7 +104,21 @@ export default function AudioPlayer({ src, downloadName }: AudioPlayerProps) {
         onPlay={() => setPlaying(true)}
         onPause={() => setPlaying(false)}
         onEnded={() => setPlaying(false)}
-        onTimeUpdate={e => setCurrentTime(e.currentTarget.currentTime)}
+        onTimeUpdate={e => {
+          const t = e.currentTarget.currentTime
+          setCurrentTime(t)
+          if ('mediaSession' in navigator && Number.isFinite(e.currentTarget.duration)) {
+            try {
+              navigator.mediaSession.setPositionState({
+                duration: e.currentTarget.duration,
+                playbackRate: e.currentTarget.playbackRate,
+                position: t,
+              })
+            } catch {
+              // Some browsers reject setPositionState if duration is 0/NaN mid-load — harmless.
+            }
+          }
+        }}
         onLoadedMetadata={e => setDuration(e.currentTarget.duration)}
         onDurationChange={e => setDuration(e.currentTarget.duration)}
       />

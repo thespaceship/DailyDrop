@@ -342,6 +342,7 @@ export default function HomeTab({ token, settings }: HomeTabProps) {
           <AudioPlayer
             src={audioSrc}
             downloadName={`dailydrop-${new Date().toISOString().slice(0, 10)}.mp3`}
+            title={`DailyDrop — ${new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}`}
           />
         </section>
       )}
