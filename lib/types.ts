@@ -45,3 +45,32 @@ export interface UserSettings {
   length: 'short' | 'medium' | 'long'
   voiceId: string
 }
+
+export type ListType = 'portfolio' | 'watchlist'
+
+export interface WatchlistItem {
+  id: string
+  list_type: ListType
+  ticker: string
+  note: string | null
+  created_at: string
+}
+
+export type WatchlistSentiment = 'attractive' | 'monitor' | 'reducing' | 'exit'
+
+export interface CuratedWatchlistItem {
+  id: string
+  ticker: string
+  company_name: string | null
+  sentiment: WatchlistSentiment | null
+  rationale: string | null
+  first_seen_at: string
+  last_seen_at: string
+}
+
+export interface FeedbackEntry {
+  id: string
+  message: string
+  created_at: string
+  userName: string
+}

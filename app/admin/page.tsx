@@ -1,9 +1,16 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { Shield, Plus, Copy, Check, AlertTriangle, TrendingUp } from 'lucide-react'
+import { Shield, Plus, Copy, Check, AlertTriangle, TrendingUp, MessageSquare } from 'lucide-react'
 import Logo from '@/components/Logo'
 import { formatCost } from '@/lib/pricing'
+
+interface FeedbackEntry {
+  id: string
+  message: string
+  created_at: string
+  userName: string
+}
 
 interface AdminUser {
   id: string
@@ -31,6 +38,8 @@ export default function AdminPage() {
   const [backfilling, setBackfilling] = useState(false)
   const [backfillResult, setBackfillResult] = useState('')
 
+  const [feedback, setFeedback] = useState<FeedbackEntry[]>([])
+
   const authHeaders = useCallback(
     (): Record<string, string> => ({
       'Content-Type': 'application/json',
@@ -43,9 +52,10 @@ export default function AdminPage() {
     setLoading(true)
     setError('')
     try {
-      const [usersRes, settingsRes] = await Promise.all([
+      const [usersRes, settingsRes, feedbackRes] = await Promise.all([
         fetch('/api/admin/users', { headers: authHeaders() }),
         fetch('/api/admin/settings', { headers: authHeaders() }),
+        fetch('/api/feedback', { headers: authHeaders() }),
       ])
 
       if (usersRes.status === 401) {
@@ -56,10 +66,12 @@ export default function AdminPage() {
 
       const usersData = await usersRes.json()
       const settingsData = await settingsRes.json()
+      const feedbackData = await feedbackRes.json().catch(() => ({}))
 
       if (!usersRes.ok && usersData.error) setError(usersData.error)
       setUsers(usersData.users || [])
       if (settingsRes.ok) setSubscriptionsEnforced(Boolean(settingsData.subscriptionsEnforced))
+      if (feedbackRes.ok) setFeedback(feedbackData.feedback || [])
       setAuthed(true)
     } catch {
       setError('Could not reach the server')
@@ -243,6 +255,38 @@ export default function AdminPage() {
               {subscriptionsEnforced ? 'Turn off' : 'Turn on'}
             </button>
           </div>
+        </section>
+
+        <section className="card">
+          <div className="section-head">
+            <span className="section-title">
+              <MessageSquare size={15} />
+              Beta feedback
+            </span>
+            {feedback.length > 0 && <span className="badge">{feedback.length}</span>}
+          </div>
+          {feedback.length === 0 ? (
+            <p className="empty-text">No feedback submitted yet.</p>
+          ) : (
+            feedback.map(entry => (
+              <div key={entry.id} className="item-row" style={{ alignItems: 'flex-start' }}>
+                <div className="item-main">
+                  <div className="item-sub" style={{ whiteSpace: 'normal', marginBottom: 4 }}>
+                    {entry.message}
+                  </div>
+                  <div className="meta-line">
+                    {entry.userName} ·{' '}
+                    {new Date(entry.created_at).toLocaleDateString('en-US', {
+                      month: 'short',
+                      day: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })}
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
         </section>
 
         <section className="card">

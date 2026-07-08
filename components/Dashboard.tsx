@@ -7,7 +7,7 @@ import ErrorBoundary from './ErrorBoundary'
 import HomeTab from './HomeTab'
 import ThesisTab from './ThesisTab'
 import LibraryTab from './LibraryTab'
-import HistoryTab from './HistoryTab'
+import PortfolioTab from './PortfolioTab'
 import SettingsTab from './SettingsTab'
 import { DEFAULT_PERSONA, DEFAULT_VOICE_ID } from '@/lib/constants'
 import type { UserSettings } from '@/lib/types'
@@ -60,8 +60,10 @@ export default function Dashboard({ token }: DashboardProps) {
             {tab === 'home' && <HomeTab token={token} settings={settings} />}
             {tab === 'thesis' && <ThesisTab token={token} settings={settings} />}
             {tab === 'library' && <LibraryTab token={token} />}
-            {tab === 'history' && <HistoryTab token={token} />}
-            {tab === 'settings' && <SettingsTab settings={settings} onSave={saveSettings} />}
+            {tab === 'portfolio' && <PortfolioTab token={token} />}
+            {tab === 'settings' && (
+              <SettingsTab token={token} settings={settings} onSave={saveSettings} />
+            )}
           </ErrorBoundary>
         </main>
       </div>

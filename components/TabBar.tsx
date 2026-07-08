@@ -1,14 +1,14 @@
 'use client'
 
-import { Home, TrendingUp, Library, History, Settings } from 'lucide-react'
+import { Home, TrendingUp, Library, Briefcase, Settings } from 'lucide-react'
 
-export type TabId = 'home' | 'thesis' | 'library' | 'history' | 'settings'
+export type TabId = 'home' | 'thesis' | 'library' | 'portfolio' | 'settings'
 
 const TABS: { id: TabId; label: string; icon: typeof Home }[] = [
   { id: 'home', label: 'Home', icon: Home },
   { id: 'thesis', label: 'Thesis', icon: TrendingUp },
   { id: 'library', label: 'Library', icon: Library },
-  { id: 'history', label: 'History', icon: History },
+  { id: 'portfolio', label: 'Portfolio', icon: Briefcase },
   { id: 'settings', label: 'Settings', icon: Settings },
 ]
 

@@ -58,6 +58,7 @@ export default function HomeTab({ token, settings }: HomeTabProps) {
   const [textCost, setTextCost] = useState<number | null>(null)
   const [audioCost, setAudioCost] = useState<number | null>(null)
   const [thesisCost, setThesisCost] = useState<number | null>(null)
+  const [watchlistCost, setWatchlistCost] = useState<number | null>(null)
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
@@ -154,6 +155,7 @@ export default function HomeTab({ token, settings }: HomeTabProps) {
     setTextCost(null)
     setAudioCost(null)
     setThesisCost(null)
+    setWatchlistCost(null)
 
     try {
       // 1. Generate the briefing script (with consolidation context server-side)
@@ -248,6 +250,21 @@ export default function HomeTab({ token, settings }: HomeTabProps) {
         }
       } catch {
         setThesisNote('Thesis update failed — the briefing itself was saved.')
+      }
+
+      // Refresh the AI-curated watchlist from today's insights (non-fatal)
+      try {
+        const watchlistRes = await fetch('/api/watchlist/curated', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-drop-token': token },
+          body: JSON.stringify({ insights: summary || script }),
+        })
+        const watchlistData = await watchlistRes.json().catch(() => ({}))
+        if (watchlistRes.ok && typeof watchlistData.cost === 'number') {
+          setWatchlistCost(watchlistData.cost)
+        }
+      } catch {
+        // Non-fatal — the briefing, thesis, and history are already saved.
       }
 
       setStep('done')
@@ -432,6 +449,7 @@ export default function HomeTab({ token, settings }: HomeTabProps) {
             <>
               Thesis updated
               {thesisCost !== null && <> · cost {formatCost(thesisCost)}</>}
+              {watchlistCost !== null && <> · watchlist {formatCost(watchlistCost)}</>}
             </>
           )}
         </div>
