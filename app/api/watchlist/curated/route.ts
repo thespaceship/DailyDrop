@@ -4,6 +4,7 @@ import { sbInsert, sbSelect, sbTrySelect, sbUpdate } from '@/lib/supabase'
 import { isValidOwnerToken, ownerFromRequest } from '@/lib/owner'
 import { normalizeTicker, parseJsonLoose } from '@/lib/textUtils'
 import { claudeCost } from '@/lib/pricing'
+import { logApiUsage } from '@/lib/usageLog'
 import type { WatchlistSentiment } from '@/lib/types'
 
 export const maxDuration = 60
@@ -132,11 +133,13 @@ Output ONLY a JSON array, nothing else, in this exact shape:
 
     const { text, usage } = await callClaude(prompt, 1500)
     const parsed = parseJsonLoose(text)
+    const cost = claudeCost(usage)
+    await logApiUsage(owner, 'curated_watchlist', 'anthropic', cost)
 
     if (!Array.isArray(parsed)) {
       // Structured extraction failed to parse — skip silently, this is
       // best-effort and shouldn't break the rest of briefing generation.
-      return NextResponse.json({ updated: 0, cost: claudeCost(usage) })
+      return NextResponse.json({ updated: 0, cost })
     }
 
     const existingByTicker = new Map(activeExisting.map(e => [e.ticker, e]))
@@ -181,7 +184,7 @@ Output ONLY a JSON array, nothing else, in this exact shape:
       updated++
     }
 
-    return NextResponse.json({ updated, cost: claudeCost(usage) })
+    return NextResponse.json({ updated, cost })
   } catch (err) {
     console.error('Curated watchlist update error:', err)
     const message = err instanceof Error ? err.message : 'Failed to update curated watchlist'

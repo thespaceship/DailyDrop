@@ -3,6 +3,7 @@ import { callClaude } from '@/lib/claude'
 import { sbInsert, sbTrySelect } from '@/lib/supabase'
 import { isValidOwnerToken, ownerFromRequest } from '@/lib/owner'
 import { claudeCost } from '@/lib/pricing'
+import { logApiUsage } from '@/lib/usageLog'
 
 export const maxDuration = 120
 
@@ -84,7 +85,10 @@ Output the complete updated thesis document. Output only the thesis itself — n
       updated_at: new Date().toISOString(),
     })
 
-    return NextResponse.json({ thesis: inserted[0], cost: claudeCost(usage) })
+    const cost = claudeCost(usage)
+    await logApiUsage(owner, 'thesis_update', 'anthropic', cost)
+
+    return NextResponse.json({ thesis: inserted[0], cost })
   } catch (err) {
     console.error('Thesis update error:', err)
     const message = err instanceof Error ? err.message : 'Failed to update thesis'

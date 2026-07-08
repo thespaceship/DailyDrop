@@ -1,15 +1,23 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { Shield, Plus, Copy, Check, AlertTriangle, TrendingUp, MessageSquare } from 'lucide-react'
+import { Shield, Plus, Copy, Check, AlertTriangle, TrendingUp, MessageSquare, DollarSign } from 'lucide-react'
 import Logo from '@/components/Logo'
 import { formatCost } from '@/lib/pricing'
+import { SERVICE_LABELS, type UsageService } from '@/lib/usageLog'
 
 interface FeedbackEntry {
   id: string
   message: string
   created_at: string
   userName: string
+}
+
+interface UsageStats {
+  totalCost: number
+  totalCalls: number
+  byProvider: Record<string, { cost: number; count: number }>
+  byService: { service: UsageService; cost: number; count: number }[]
 }
 
 interface AdminUser {
@@ -39,6 +47,7 @@ export default function AdminPage() {
   const [backfillResult, setBackfillResult] = useState('')
 
   const [feedback, setFeedback] = useState<FeedbackEntry[]>([])
+  const [usage, setUsage] = useState<UsageStats | null>(null)
 
   const authHeaders = useCallback(
     (): Record<string, string> => ({
@@ -52,10 +61,11 @@ export default function AdminPage() {
     setLoading(true)
     setError('')
     try {
-      const [usersRes, settingsRes, feedbackRes] = await Promise.all([
+      const [usersRes, settingsRes, feedbackRes, usageRes] = await Promise.all([
         fetch('/api/admin/users', { headers: authHeaders() }),
         fetch('/api/admin/settings', { headers: authHeaders() }),
         fetch('/api/feedback', { headers: authHeaders() }),
+        fetch('/api/admin/usage', { headers: authHeaders() }),
       ])
 
       if (usersRes.status === 401) {
@@ -67,11 +77,13 @@ export default function AdminPage() {
       const usersData = await usersRes.json()
       const settingsData = await settingsRes.json()
       const feedbackData = await feedbackRes.json().catch(() => ({}))
+      const usageData = await usageRes.json().catch(() => ({}))
 
       if (!usersRes.ok && usersData.error) setError(usersData.error)
       setUsers(usersData.users || [])
       if (settingsRes.ok) setSubscriptionsEnforced(Boolean(settingsData.subscriptionsEnforced))
       if (feedbackRes.ok) setFeedback(feedbackData.feedback || [])
+      if (usageRes.ok) setUsage(usageData)
       setAuthed(true)
     } catch {
       setError('Could not reach the server')
@@ -238,6 +250,65 @@ export default function AdminPage() {
             {error}
           </div>
         )}
+
+        <section className="card">
+          <div className="section-head">
+            <span className="section-title">
+              <DollarSign size={15} />
+              API cost
+            </span>
+          </div>
+          {!usage || usage.totalCalls === 0 ? (
+            <p className="empty-text">
+              No usage logged yet — this fills in as briefings, thesis updates, and other
+              generations run from this point forward.
+            </p>
+          ) : (
+            <>
+              <div style={{ marginBottom: 16 }}>
+                <div className="meta-line" style={{ marginBottom: 2 }}>
+                  Total, all accounts, since tracking began
+                </div>
+                <div style={{ fontSize: 28, fontWeight: 700, letterSpacing: '-0.02em' }}>
+                  {formatCost(usage.totalCost)}
+                </div>
+                <div className="meta-line">{usage.totalCalls} calls logged</div>
+              </div>
+
+              <div className="stack-8" style={{ marginBottom: 16 }}>
+                {Object.entries(usage.byProvider).map(([provider, stats]) => (
+                  <div key={provider} className="toggle-row">
+                    <span style={{ fontSize: 13, textTransform: 'capitalize' }}>{provider}</span>
+                    <span className="mono" style={{ fontSize: 13 }}>
+                      {formatCost(stats.cost)} · {stats.count} calls
+                    </span>
+                  </div>
+                ))}
+              </div>
+
+              <div className="meta-line" style={{ marginBottom: 8 }}>
+                By service
+              </div>
+              {usage.byService.map(row => (
+                <div key={row.service} className="item-row">
+                  <div className="item-main">
+                    <div className="item-title">{SERVICE_LABELS[row.service] || row.service}</div>
+                    <div className="item-sub">{row.count} calls</div>
+                  </div>
+                  <div className="mono" style={{ fontSize: 13, flexShrink: 0 }}>
+                    {formatCost(row.cost)}
+                  </div>
+                </div>
+              ))}
+
+              <p className="hint" style={{ marginTop: 12 }}>
+                Costs are calculated from published API rates, not pulled from your actual
+                provider invoices — treat as a close estimate, and spot-check against your real
+                Anthropic/OpenAI billing occasionally.
+              </p>
+            </>
+          )}
+        </section>
 
         <section className="card">
           <div className="section-head">

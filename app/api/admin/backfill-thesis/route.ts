@@ -3,6 +3,7 @@ import { requireAdmin } from '@/lib/adminAuth'
 import { callClaude } from '@/lib/claude'
 import { sbInsert, sbSelect, sbTrySelect } from '@/lib/supabase'
 import { claudeCost } from '@/lib/pricing'
+import { logApiUsage } from '@/lib/usageLog'
 
 export const maxDuration = 180
 
@@ -98,10 +99,13 @@ Output only the complete thesis document — no preamble, no commentary, no ment
       updated_at: new Date().toISOString(),
     })
 
+    const cost = claudeCost(usage)
+    await logApiUsage(owner, 'thesis_backfill', 'anthropic', cost)
+
     return NextResponse.json({
       thesis: inserted[0],
       briefingsUsed: usable.length,
-      cost: claudeCost(usage),
+      cost,
     })
   } catch (err) {
     console.error('Thesis backfill error:', err)

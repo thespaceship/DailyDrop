@@ -9,6 +9,7 @@ import {
 } from '@/lib/constants'
 import { ownerFromRequest } from '@/lib/owner'
 import { claudeCost } from '@/lib/pricing'
+import { logApiUsage } from '@/lib/usageLog'
 
 export const maxDuration = 180
 
@@ -91,7 +92,10 @@ export async function POST(req: NextRequest) {
     const { text, usage } = await callClaude(prompt, LENGTH_MAX_TOKENS[length])
     const { script, summary } = parseResponse(text)
 
-    return NextResponse.json({ script, summary, cost: claudeCost(usage) })
+    const cost = claudeCost(usage)
+    await logApiUsage(owner, 'briefing_script', 'anthropic', cost)
+
+    return NextResponse.json({ script, summary, cost })
   } catch (err) {
     console.error('Briefing error:', err)
     const message = err instanceof Error ? err.message : 'Failed to generate briefing'

@@ -4,6 +4,8 @@ import { DEFAULT_VOICE_ID, VOICE_IDS } from '@/lib/constants'
 import { uploadAudioToStorage } from '@/lib/storage'
 import { stripSectionMarkers } from '@/lib/textUtils'
 import { ttsCost } from '@/lib/pricing'
+import { ownerFromRequest } from '@/lib/owner'
+import { logApiUsage } from '@/lib/usageLog'
 
 export const maxDuration = 180
 
@@ -51,11 +53,13 @@ export async function POST(req: NextRequest) {
     // locks or the tab backgrounds right after this response is sent — the
     // browser no longer needs to stay awake for the upload to succeed.
     const audioUrl = await uploadAudioToStorage(buffer)
+    const cost = ttsCost(script)
+    await logApiUsage(ownerFromRequest(req), 'audio_narration', 'openai', cost)
 
     return NextResponse.json({
       audio: buffer.toString('base64'),
       audioUrl,
-      cost: ttsCost(script),
+      cost,
     })
   } catch (err) {
     console.error('Audio error:', err)

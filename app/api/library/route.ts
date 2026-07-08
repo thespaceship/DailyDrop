@@ -3,6 +3,7 @@ import { callClaude, callClaudeWithPdf } from '@/lib/claude'
 import { sbDelete, sbInsert, sbSelect } from '@/lib/supabase'
 import { isValidOwnerToken, ownerFromRequest } from '@/lib/owner'
 import { claudeCost } from '@/lib/pricing'
+import { logApiUsage } from '@/lib/usageLog'
 
 export const maxDuration = 60
 
@@ -101,7 +102,10 @@ export async function POST(req: NextRequest) {
       summary: summary.trim(),
     })
 
-    return NextResponse.json({ document: inserted[0], cost: claudeCost(usage) })
+    const cost = claudeCost(usage)
+    await logApiUsage(owner, 'library_summary', 'anthropic', cost)
+
+    return NextResponse.json({ document: inserted[0], cost })
   } catch (err) {
     console.error('Library add error:', err)
     const message = err instanceof Error ? err.message : 'Failed to add document'
