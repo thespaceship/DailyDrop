@@ -53,6 +53,7 @@ export default function HomeTab({ token, settings }: HomeTabProps) {
   const [audioSrc, setAudioSrc] = useState<string | null>(null)
   const [errorMsg, setErrorMsg] = useState('')
   const [thesisNote, setThesisNote] = useState('')
+  const [audioSaveWarning, setAudioSaveWarning] = useState('')
   const [showScript, setShowScript] = useState(false)
 
   const [textCost, setTextCost] = useState<number | null>(null)
@@ -151,6 +152,7 @@ export default function HomeTab({ token, settings }: HomeTabProps) {
     setAudioSrc(null)
     setErrorMsg('')
     setThesisNote('')
+    setAudioSaveWarning('')
     setShowScript(false)
     setTextCost(null)
     setAudioCost(null)
@@ -200,6 +202,11 @@ export default function HomeTab({ token, settings }: HomeTabProps) {
 
       setAudioSrc(`data:audio/mpeg;base64,${audioData.audio}`)
       setAudioCost(typeof audioData.cost === 'number' ? audioData.cost : null)
+      if (!audioData.audioUrl) {
+        setAudioSaveWarning(
+          "Audio played, but couldn't be saved to Briefing History — it will only be available in this session. Check the Supabase Storage bucket policy."
+        )
+      }
 
       await finishGeneration(audioData.audioUrl ?? null)
     } catch (err) {
@@ -473,6 +480,12 @@ export default function HomeTab({ token, settings }: HomeTabProps) {
             <p className="meta-line" style={{ marginTop: 10 }}>
               Audio cost: {formatCost(audioCost)}
             </p>
+          )}
+          {audioSaveWarning && (
+            <div className="error-box" style={{ marginTop: 12 }}>
+              <AlertTriangle size={16} style={{ flexShrink: 0, marginTop: 1 }} />
+              {audioSaveWarning}
+            </div>
           )}
         </section>
       )}
