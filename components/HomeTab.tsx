@@ -35,6 +35,16 @@ const STEP_LABELS: Record<string, string> = {
   thesis: 'Updating investment thesis...',
 }
 
+// Only these steps represent a finished, stable result worth persisting —
+// the busy in-between steps involve in-flight saves to Briefing History, and
+// resuming those after a reload risks creating duplicate history entries.
+const SETTLED_STEPS: Step[] = ['awaiting-audio-decision', 'done', 'error']
+
+function todayLocalDateString() {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
 interface HomeTabProps {
   token: string
   settings: UserSettings
@@ -43,6 +53,7 @@ interface HomeTabProps {
 export default function HomeTab({ token, settings }: HomeTabProps) {
   const videosKey = `dailydrop_draft_videos_${token}`
   const urlInputKey = `dailydrop_draft_urlinput_${token}`
+  const draftKey = `dailydrop_briefing_draft_${token}`
 
   const [videos, setVideos] = useState<VideoItem[]>([])
   const [urlInput, setUrlInput] = useState('')
@@ -55,6 +66,11 @@ export default function HomeTab({ token, settings }: HomeTabProps) {
   const [script, setScript] = useState('')
   const [summary, setSummary] = useState('')
   const [audioSrc, setAudioSrc] = useState<string | null>(null)
+  // The public Storage URL for the audio (once uploaded), kept separate from
+  // audioSrc — audioSrc briefly holds a large base64 data URI for instant
+  // playback right after generation, which is too big to persist to
+  // localStorage. Only this small URL is what we save for continuity.
+  const [audioUrl, setAudioUrl] = useState<string | null>(null)
   const [errorMsg, setErrorMsg] = useState('')
   const [thesisNote, setThesisNote] = useState('')
   const [audioSaveWarning, setAudioSaveWarning] = useState('')
@@ -103,6 +119,35 @@ export default function HomeTab({ token, settings }: HomeTabProps) {
     } catch {
       // Corrupt draft — start fresh.
     }
+
+    // Restore today's finished briefing (script/audio) so it stays on the
+    // homepage across tab switches and reloads. Once it's from a previous
+    // day, drop it — it already lives in Briefing History.
+    try {
+      const savedDraft = localStorage.getItem(draftKey)
+      if (savedDraft) {
+        const parsed = JSON.parse(savedDraft)
+        if (parsed.date === todayLocalDateString()) {
+          setStep(parsed.step ?? 'idle')
+          setScript(parsed.script ?? '')
+          setSummary(parsed.summary ?? '')
+          setAudioUrl(parsed.audioUrl ?? null)
+          setAudioSrc(parsed.audioUrl ?? null)
+          setErrorMsg(parsed.errorMsg ?? '')
+          setThesisNote(parsed.thesisNote ?? '')
+          setAudioSaveWarning(parsed.audioSaveWarning ?? '')
+          setTextCost(parsed.textCost ?? null)
+          setAudioCost(parsed.audioCost ?? null)
+          setThesisCost(parsed.thesisCost ?? null)
+          setWatchlistCost(parsed.watchlistCost ?? null)
+        } else {
+          localStorage.removeItem(draftKey)
+        }
+      }
+    } catch {
+      localStorage.removeItem(draftKey)
+    }
+
     setHydrated(true)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -124,6 +169,77 @@ export default function HomeTab({ token, settings }: HomeTabProps) {
       // Storage full/unavailable — draft persistence is best-effort.
     }
   }, [urlInput, hydrated, urlInputKey])
+
+  useEffect(() => {
+    if (!hydrated) return
+    if (!SETTLED_STEPS.includes(step) || (!script && !errorMsg)) return
+    try {
+      const bundle = {
+        date: todayLocalDateString(),
+        step,
+        script,
+        summary,
+        audioUrl,
+        errorMsg,
+        thesisNote,
+        audioSaveWarning,
+        textCost,
+        audioCost,
+        thesisCost,
+        watchlistCost,
+      }
+      localStorage.setItem(draftKey, JSON.stringify(bundle))
+    } catch {
+      // Storage full/unavailable — draft persistence is best-effort.
+    }
+  }, [
+    hydrated,
+    step,
+    script,
+    summary,
+    audioUrl,
+    errorMsg,
+    thesisNote,
+    audioSaveWarning,
+    textCost,
+    audioCost,
+    thesisCost,
+    watchlistCost,
+    draftKey,
+  ])
+
+  // Re-check on every return to the app (not just reloads) so a briefing
+  // left on screen through midnight clears off the homepage without the
+  // user having to do anything.
+  useEffect(() => {
+    function clearIfStale() {
+      if (document.visibilityState !== 'visible') return
+      try {
+        const saved = localStorage.getItem(draftKey)
+        if (!saved) return
+        const parsed = JSON.parse(saved)
+        if (parsed.date !== todayLocalDateString()) {
+          localStorage.removeItem(draftKey)
+          setStep('idle')
+          setScript('')
+          setSummary('')
+          setAudioSrc(null)
+          setAudioUrl(null)
+          setErrorMsg('')
+          setThesisNote('')
+          setAudioSaveWarning('')
+          setTextCost(null)
+          setAudioCost(null)
+          setThesisCost(null)
+          setWatchlistCost(null)
+        }
+      } catch {
+        localStorage.removeItem(draftKey)
+      }
+    }
+    document.addEventListener('visibilitychange', clearIfStale)
+    return () => document.removeEventListener('visibilitychange', clearIfStale)
+  }, [draftKey])
 
   async function fetchEmails() {
     setEmailsLoading(true)
@@ -199,6 +315,7 @@ export default function HomeTab({ token, settings }: HomeTabProps) {
     setScript('')
     setSummary('')
     setAudioSrc(null)
+    setAudioUrl(null)
     setErrorMsg('')
     setThesisNote('')
     setAudioSaveWarning('')
@@ -251,7 +368,9 @@ export default function HomeTab({ token, settings }: HomeTabProps) {
 
       setAudioSrc(`data:audio/mpeg;base64,${audioData.audio}`)
       setAudioCost(typeof audioData.cost === 'number' ? audioData.cost : null)
-      if (!audioData.audioUrl) {
+      if (audioData.audioUrl) {
+        setAudioUrl(audioData.audioUrl)
+      } else {
         setAudioSaveWarning(
           "Audio played, but couldn't be saved to Briefing History — it will only be available in this session. Check the Supabase Storage bucket policy."
         )
