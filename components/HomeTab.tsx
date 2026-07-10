@@ -41,8 +41,12 @@ interface HomeTabProps {
 }
 
 export default function HomeTab({ token, settings }: HomeTabProps) {
+  const videosKey = `dailydrop_draft_videos_${token}`
+  const urlInputKey = `dailydrop_draft_urlinput_${token}`
+
   const [videos, setVideos] = useState<VideoItem[]>([])
   const [urlInput, setUrlInput] = useState('')
+  const [hydrated, setHydrated] = useState(false)
   const [emails, setEmails] = useState<EmailItem[]>([])
   const [emailConnected, setEmailConnected] = useState(false)
   const [emailsLoading, setEmailsLoading] = useState(false)
@@ -79,6 +83,48 @@ export default function HomeTab({ token, settings }: HomeTabProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // Restore any videos added before the tab was switched away from (or the
+  // app was backgrounded and the browser reclaimed the page). Any video that
+  // was still mid-fetch when that happened gets its transcript re-requested.
+  useEffect(() => {
+    try {
+      const savedVideos = localStorage.getItem(videosKey)
+      if (savedVideos) {
+        const parsed = JSON.parse(savedVideos)
+        if (Array.isArray(parsed)) {
+          setVideos(parsed)
+          parsed
+            .filter((v: VideoItem) => v.status === 'loading')
+            .forEach((v: VideoItem) => fetchTranscript(v.url))
+        }
+      }
+      const savedUrlInput = localStorage.getItem(urlInputKey)
+      if (savedUrlInput) setUrlInput(savedUrlInput)
+    } catch {
+      // Corrupt draft — start fresh.
+    }
+    setHydrated(true)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  useEffect(() => {
+    if (!hydrated) return
+    try {
+      localStorage.setItem(videosKey, JSON.stringify(videos))
+    } catch {
+      // Storage full/unavailable — draft persistence is best-effort.
+    }
+  }, [videos, hydrated, videosKey])
+
+  useEffect(() => {
+    if (!hydrated) return
+    try {
+      localStorage.setItem(urlInputKey, urlInput)
+    } catch {
+      // Storage full/unavailable — draft persistence is best-effort.
+    }
+  }, [urlInput, hydrated, urlInputKey])
+
   async function fetchEmails() {
     setEmailsLoading(true)
     try {
@@ -103,12 +149,7 @@ export default function HomeTab({ token, settings }: HomeTabProps) {
     window.location.href = `/api/auth?return=${encodeURIComponent(token)}`
   }
 
-  async function addVideo() {
-    const url = urlInput.trim()
-    if (!url || videos.some(v => v.url === url)) return
-    setUrlInput('')
-    setVideos(prev => [...prev, { url, transcript: null, status: 'loading' }])
-
+  async function fetchTranscript(url: string) {
     try {
       const res = await fetch('/api/transcript', {
         method: 'POST',
@@ -135,6 +176,14 @@ export default function HomeTab({ token, settings }: HomeTabProps) {
         )
       )
     }
+  }
+
+  async function addVideo() {
+    const url = urlInput.trim()
+    if (!url || videos.some(v => v.url === url)) return
+    setUrlInput('')
+    setVideos(prev => [...prev, { url, transcript: null, status: 'loading' }])
+    await fetchTranscript(url)
   }
 
   function removeVideo(url: string) {
