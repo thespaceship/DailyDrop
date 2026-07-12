@@ -52,7 +52,16 @@ export async function POST(req: NextRequest) {
       )
     )[0]
 
+    const today = new Date().toLocaleDateString('en-US', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    })
+
     const prompt = `You are maintaining a continuously evolving investment thesis document.
+
+TODAY'S ACTUAL DATE: ${today}
 
 CURRENT THESIS (from previous analysis):
 ${current?.content || 'No thesis exists yet. Create the first version from today\'s insights.'}
@@ -72,6 +81,10 @@ Update the investment thesis by integrating today's insights. The thesis should:
   overlapping points, and tighten language rather than letting the document
   grow indefinitely. A sharper, shorter memo is more valuable than an
   exhaustive one — do not simply append today's insights to what exists.
+- Do not include any "updated through" / "as of" date line or footer — the
+  app displays the real update date separately. If you reference dates in the
+  body, use only TODAY'S ACTUAL DATE above or dates already present in the
+  current thesis or insights — never invent or project a future date.
 
 Output the complete updated thesis document. Output only the thesis itself — no preamble, no commentary.`
 

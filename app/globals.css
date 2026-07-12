@@ -186,6 +186,11 @@ a {
   -webkit-backdrop-filter: blur(12px);
   border-top: 1px solid var(--border);
   padding-bottom: env(safe-area-inset-bottom);
+  /* Forces its own compositing layer — without this, iOS Safari can visually
+     detach fixed + backdrop-filter elements from the viewport during
+     momentum scrolling, making the bar appear to float. */
+  transform: translateZ(0);
+  will-change: transform;
 }
 
 .tabbar-inner {
