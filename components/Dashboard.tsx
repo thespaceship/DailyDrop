@@ -56,15 +56,34 @@ export default function Dashboard({ token }: DashboardProps) {
       <Header />
       <div className="app">
         <main className="content">
-          <ErrorBoundary>
-            {tab === 'home' && <HomeTab token={token} settings={settings} />}
-            {tab === 'thesis' && <ThesisTab token={token} settings={settings} />}
-            {tab === 'library' && <LibraryTab token={token} />}
-            {tab === 'portfolio' && <PortfolioTab token={token} />}
-            {tab === 'settings' && (
+          {/* All tabs stay mounted so audio playback (and other in-progress
+              state) survives switching tabs — e.g. giving feedback on the
+              Settings tab must not stop or reset an in-flight briefing. */}
+          <div style={{ display: tab === 'home' ? 'contents' : 'none' }}>
+            <ErrorBoundary>
+              <HomeTab token={token} settings={settings} />
+            </ErrorBoundary>
+          </div>
+          <div style={{ display: tab === 'thesis' ? 'contents' : 'none' }}>
+            <ErrorBoundary>
+              <ThesisTab token={token} settings={settings} />
+            </ErrorBoundary>
+          </div>
+          <div style={{ display: tab === 'library' ? 'contents' : 'none' }}>
+            <ErrorBoundary>
+              <LibraryTab token={token} />
+            </ErrorBoundary>
+          </div>
+          <div style={{ display: tab === 'portfolio' ? 'contents' : 'none' }}>
+            <ErrorBoundary>
+              <PortfolioTab token={token} />
+            </ErrorBoundary>
+          </div>
+          <div style={{ display: tab === 'settings' ? 'contents' : 'none' }}>
+            <ErrorBoundary>
               <SettingsTab token={token} settings={settings} onSave={saveSettings} />
-            )}
-          </ErrorBoundary>
+            </ErrorBoundary>
+          </div>
         </main>
       </div>
       <TabBar active={tab} onChange={setTab} />

@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { Play, Pause, Download } from 'lucide-react'
+import { Play, Pause, Download, RotateCcw } from 'lucide-react'
 import { useWakeLock } from '@/lib/useWakeLock'
 
 interface AudioPlayerProps {
@@ -88,6 +88,14 @@ export default function AudioPlayer({ src, downloadName, title = 'DailyDrop Brie
     setCurrentTime(value)
   }
 
+  function rewind() {
+    const audio = audioRef.current
+    if (!audio) return
+    const next = Math.max(0, audio.currentTime - SKIP_SECONDS)
+    audio.currentTime = next
+    setCurrentTime(next)
+  }
+
   function download() {
     const a = document.createElement('a')
     a.href = src
@@ -123,6 +131,9 @@ export default function AudioPlayer({ src, downloadName, title = 'DailyDrop Brie
         onDurationChange={e => setDuration(e.currentTarget.duration)}
       />
       <div className="player-controls">
+        <button className="btn-icon" onClick={rewind} aria-label={`Rewind ${SKIP_SECONDS} seconds`}>
+          <RotateCcw size={18} />
+        </button>
         <button className="player-play" onClick={togglePlay} aria-label={playing ? 'Pause' : 'Play'}>
           {playing ? <Pause size={18} fill="currentColor" /> : <Play size={18} fill="currentColor" style={{ marginLeft: 2 }} />}
         </button>

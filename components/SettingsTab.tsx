@@ -110,9 +110,9 @@ export default function SettingsTab({ token, settings, onSave }: SettingsTabProp
             value={draft.length}
             onChange={e => setDraft({ ...draft, length: e.target.value as UserSettings['length'] })}
           >
-            <option value="short">Short (~15 min)</option>
+            <option value="short">Short (~20 min)</option>
             <option value="medium">Medium (~30 min)</option>
-            <option value="long">Long (~45 min)</option>
+            <option value="long">Long (~40 min)</option>
           </select>
         </div>
 

@@ -31,15 +31,15 @@ export const DEFAULT_PERSONA =
 export type BriefingLength = 'short' | 'medium' | 'long'
 
 export const LENGTH_TARGETS: Record<BriefingLength, string> = {
-  short: '2000-2200',
+  short: '2800-3000',
   medium: '4200-4500',
-  long: '6300-6800',
+  long: '5700-5900',
 }
 
 export const LENGTH_MAX_TOKENS: Record<BriefingLength, number> = {
-  short: 6000,
+  short: 8000,
   medium: 10000,
-  long: 14000,
+  long: 13000,
 }
 
 /** Section markers Claude emits in scripts. Rendered as headers in the UI, stripped before TTS. */

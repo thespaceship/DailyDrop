@@ -415,7 +415,7 @@ export default function HomeTab({ token, settings }: HomeTabProps) {
         const thesisRes = await fetch('/api/thesis', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'x-drop-token': token },
-          body: JSON.stringify({ insights: summary || script }),
+          body: JSON.stringify({ insights: summary || script, videoUrls: videos.map(v => v.url) }),
         })
         const thesisData = await thesisRes.json().catch(() => ({}))
         if (!thesisRes.ok) {

@@ -14,6 +14,11 @@ interface ThesisRow {
   version: number
 }
 
+interface BriefingSourcesRow {
+  created_at: string
+  video_urls: string[] | null
+}
+
 export async function GET(req: NextRequest) {
   try {
     const owner = ownerFromRequest(req)
@@ -39,7 +44,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid access token' }, { status: 401 })
     }
 
-    const { insights } = await req.json()
+    const { insights, videoUrls } = await req.json()
 
     if (!insights || typeof insights !== 'string') {
       return NextResponse.json({ error: 'No insights provided' }, { status: 400 })
@@ -51,6 +56,26 @@ export async function POST(req: NextRequest) {
         `owner=eq.${encodeURIComponent(owner)}&select=content,version&order=version.desc&limit=1`
       )
     )[0]
+
+    // Guard against the same video being fed in on more than one occasion
+    // (e.g. accidentally re-added, or the briefing regenerated) getting read
+    // as independent confirming evidence and inflating conviction. Excludes
+    // the briefing just saved for today (the most recent row) — only a
+    // match against an earlier day counts as a repeat.
+    let repeatedSourcesNote = ''
+    if (Array.isArray(videoUrls) && videoUrls.length > 0) {
+      const recentBriefings = await sbTrySelect<BriefingSourcesRow>(
+        'briefings',
+        `owner=eq.${encodeURIComponent(owner)}&select=created_at,video_urls&order=created_at.desc&limit=8`
+      )
+      const priorUrls = new Set(
+        recentBriefings.slice(1).flatMap(b => b.video_urls || [])
+      )
+      const repeats = videoUrls.filter((u: unknown) => typeof u === 'string' && priorUrls.has(u))
+      if (repeats.length > 0) {
+        repeatedSourcesNote = `\n\nNOTE — REPEATED SOURCE MATERIAL: The following video(s) in today's insights were already covered in a previous briefing: ${repeats.join(', ')}. If today's insights are substantially restating that same source rather than presenting genuinely new information, treat it as the same piece of evidence seen again — not as new corroboration — and do not increase conviction on the strength of it alone.`
+      }
+    }
 
     const today = new Date().toLocaleDateString('en-US', {
       weekday: 'long',
@@ -67,12 +92,16 @@ CURRENT THESIS (from previous analysis):
 ${current?.content || 'No thesis exists yet. Create the first version from today\'s insights.'}
 
 TODAY'S NEW INSIGHTS:
-${insights}
+${insights}${repeatedSourcesNote}
 
 Update the investment thesis by integrating today's insights. The thesis should:
 - Build on and refine previous positions, not replace them
 - Note where conviction has increased or decreased
 - Track emerging themes across multiple days
+- If today's insights substantially restate content already reflected in the
+  current thesis (e.g. the same source was accidentally submitted twice),
+  treat it as the same evidence seen again, not as new corroboration — do
+  not increase conviction or repeat a point based on duplicated input alone
 - Maintain a clear current market outlook
 - Include specific sector and asset class views
 - Be written as a professional investment memo, not a list
