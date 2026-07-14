@@ -19,7 +19,7 @@ The developer (Marco) is a non-coder — can run terminal commands and push to G
 
 - Next.js 14 (App Router), TypeScript strict mode
 - Supabase: Postgres accessed via raw REST calls through hand-written helpers in `lib/supabase.ts` (`sbSelect`/`sbInsert`/`sbUpdate`/`sbDelete`/`sbUpsert`/`sbTrySelect`) — deliberately no Supabase SDK, no ORM. Plus Supabase Storage, two public buckets: `briefings-audio`, `library-documents`.
-- Anthropic Claude via `lib/claude.ts` (`callClaude` for text, `callClaudeWithPdf` for native PDF reading — no local text-extraction library). Model is pinned in `lib/constants.ts` as `CLAUDE_MODEL`.
+- Anthropic Claude via `lib/claude.ts` (`callClaude` for text, `callClaudeWithPdf` for native PDF reading). Model is pinned in `lib/constants.ts` as `CLAUDE_MODEL`. Library PDF uploads (`app/api/library/route.ts`) extract text locally first via `unpdf` (cheap — no per-page image-token billing) and only fall back to `callClaudeWithPdf` when extraction comes back too short, i.e. scanned/image-only PDFs.
 - OpenAI `tts-1-hd` for audio (`app/api/audio/route.ts`), default voice `onyx`, chunked at 4000 chars with 3-way parallel generation.
 - Supadata for YouTube transcripts; Google OAuth (`gmail.readonly`, read-only) for newsletters.
 - Stripe is wired but dormant — webhook exists, subscription enforcement is a toggle in `app_settings`, defaults off.

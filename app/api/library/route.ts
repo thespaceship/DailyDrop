@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { getDocumentProxy, extractText } from 'unpdf'
 import { callClaude, callClaudeWithPdf } from '@/lib/claude'
 import { sbDelete, sbInsert, sbSelect } from '@/lib/supabase'
 import { isValidOwnerToken, ownerFromRequest } from '@/lib/owner'
@@ -9,6 +10,12 @@ export const maxDuration = 60
 
 const MAX_DOCUMENT_CHARS = 100_000
 const MAX_FILE_BYTES = 15 * 1024 * 1024 // 15MB
+
+// Below this, local extraction likely just picked up stray vector text
+// (headers, page numbers) from an otherwise scanned/image PDF — not enough
+// to summarize from, so it's worth paying for Claude's native PDF reading
+// instead of returning a near-empty summary.
+const MIN_EXTRACTED_PDF_CHARS = 200
 
 const SUMMARY_INSTRUCTIONS =
   'Summarize this document in roughly 200 words, focused on what matters for investment analysis: key facts, figures, positions, and conclusions. Output only the summary.'
@@ -56,8 +63,7 @@ export async function POST(req: NextRequest) {
     let content: string
 
     if (typeof body.fileUrl === 'string' && body.fileUrl) {
-      // File path (PDF): fetch the uploaded file from Storage and hand it
-      // to Claude directly — no local text extraction needed for PDFs.
+      // File path (PDF): fetch the uploaded file from Storage.
       const fileRes = await fetch(body.fileUrl)
       if (!fileRes.ok) {
         return NextResponse.json({ error: 'Could not read the uploaded file' }, { status: 400 })
@@ -73,11 +79,37 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: 'File is too large (15MB limit)' }, { status: 400 })
       }
 
-      const base64 = Buffer.from(arrayBuffer).toString('base64')
-      const result = await callClaudeWithPdf(SUMMARY_INSTRUCTIONS, base64, 600)
-      summary = result.text
-      usage = result.usage
-      content = `[Summary generated from uploaded file: ${body.fileName || 'document.pdf'}]`
+      // Try extracting the PDF's text locally first — Claude's native PDF
+      // reading bills each page as an image on top of the text tokens, so
+      // for a normal text PDF, sending the extracted text as plain text
+      // instead is dramatically cheaper. Only fall back to native reading
+      // when extraction comes back too short to summarize from, which is
+      // what happens with scanned/image-only PDFs (no text layer to pull).
+      let extractedText = ''
+      try {
+        const pdf = await getDocumentProxy(new Uint8Array(arrayBuffer))
+        const { text } = await extractText(pdf, { mergePages: true })
+        extractedText = text.trim()
+      } catch {
+        // Malformed or unreadable PDF for pdf.js — fall back below.
+      }
+
+      if (extractedText.length >= MIN_EXTRACTED_PDF_CHARS) {
+        const trimmed = extractedText.slice(0, MAX_DOCUMENT_CHARS)
+        const result = await callClaude(
+          `${SUMMARY_INSTRUCTIONS}\n\nTITLE: ${title}\n\nDOCUMENT:\n${trimmed.slice(0, 30_000)}`,
+          600
+        )
+        summary = result.text
+        usage = result.usage
+        content = trimmed
+      } else {
+        const base64 = Buffer.from(arrayBuffer).toString('base64')
+        const result = await callClaudeWithPdf(SUMMARY_INSTRUCTIONS, base64, 600)
+        summary = result.text
+        usage = result.usage
+        content = `[Summary generated from uploaded file: ${body.fileName || 'document.pdf'}]`
+      }
     } else if (typeof body.content === 'string' && body.content.trim().length >= 50) {
       // Text path (pasted text, or a .txt/.md file already read client-side)
       const trimmed = body.content.trim().slice(0, MAX_DOCUMENT_CHARS)

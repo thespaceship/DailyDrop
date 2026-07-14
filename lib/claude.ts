@@ -56,9 +56,11 @@ export async function callClaude(prompt: string, maxTokens = 8000): Promise<Clau
 }
 
 /**
- * Call Claude with a PDF attached directly — Claude reads PDFs natively
- * (including scanned/image pages), so no separate text-extraction step is
- * needed for this file type.
+ * Call Claude with a PDF attached directly — Claude reads PDFs natively,
+ * including scanned/image pages. This bills each page as an image on top of
+ * the text tokens, so it's noticeably more expensive than plain text input.
+ * Used only as a fallback in `app/api/library/route.ts` when local text
+ * extraction (via `unpdf`) comes back empty — i.e. scanned/image-only PDFs.
  */
 export async function callClaudeWithPdf(
   instructions: string,
