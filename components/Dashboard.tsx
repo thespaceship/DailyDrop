@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useLayoutEffect, useState } from 'react'
 import Header from './Header'
 import TabBar, { TabId } from './TabBar'
 import DesktopSidebar from './DesktopSidebar'
@@ -52,6 +52,23 @@ const TAB_DETAILS: Record<TabId, { title: string; description: string }> = {
 export default function Dashboard({ token }: DashboardProps) {
   const [tab, setTab] = useState<TabId>('home')
   const [settings, setSettings] = useState<UserSettings>(DEFAULT_SETTINGS)
+
+  useLayoutEffect(() => {
+    // iOS Safari can compute `position: sticky` elements (the header, the
+    // tab bar) in the wrong spot on the very first paint, correcting itself
+    // only once something later forces a layout recalculation — e.g.
+    // switching tabs. This runs before the browser paints (unlike a plain
+    // effect + requestAnimationFrame, which runs after — meaning the wrong
+    // layout would already be visible for a frame), and forces that same
+    // recalculation up front by briefly removing body from the render tree
+    // and putting it back, so the sticky bars are correctly placed from the
+    // very first frame the user sees. Mobile only — desktop uses a sidebar,
+    // not the sticky header/tab bar, so this is a no-op there.
+    if (window.innerWidth >= 768) return
+    document.body.style.display = 'none'
+    void document.body.offsetHeight
+    document.body.style.display = ''
+  }, [])
 
   useEffect(() => {
     try {
