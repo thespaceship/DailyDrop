@@ -50,8 +50,8 @@ export default function SettingsTab({ token, settings, onSave }: SettingsTabProp
   }
 
   return (
-    <div className="stack-16">
-      <section className="card">
+    <div className="stack-16 settings-workspace">
+      <section className="card settings-primary-card">
         <div className="section-head">
           <span className="section-title">
             <Settings size={15} />
@@ -144,57 +144,59 @@ export default function SettingsTab({ token, settings, onSave }: SettingsTabProp
         </button>
       </section>
 
-      <section className="card">
-        <button className="collapse-head" onClick={() => setShowHistory(s => !s)}>
-          <span>Briefing History</span>
-          {showHistory ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-        </button>
-        {showHistory && (
-          <div style={{ marginTop: 16 }}>
-            <HistoryTab token={token} />
-          </div>
-        )}
-      </section>
-
-      <section className="card">
-        <div className="section-head">
-          <span className="section-title">
-            <MessageSquare size={15} />
-            Beta feedback
-          </span>
-        </div>
-        <p className="hint" style={{ marginBottom: 12 }}>
-          Notice a bug, or have an idea for what would make this more useful? Send it here.
-        </p>
-        <div className="field">
-          <textarea
-            value={feedback}
-            onChange={e => setFeedback(e.target.value)}
-            rows={4}
-            placeholder="What's working, what's not, what you'd want next..."
-          />
-        </div>
-        <button
-          className="btn btn-ghost btn-block"
-          onClick={sendFeedback}
-          disabled={sendingFeedback || !feedback.trim()}
-        >
-          {sendingFeedback ? (
-            <span className="spinner spinner-accent" />
-          ) : feedbackSent ? (
-            <>
-              <Check size={16} /> Sent
-            </>
-          ) : (
-            'Send feedback'
+      <div className="settings-secondary">
+        <section className="card settings-history-card">
+          <button className="collapse-head" onClick={() => setShowHistory(s => !s)}>
+            <span>Briefing History</span>
+            {showHistory ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+          </button>
+          {showHistory && (
+            <div className="settings-history-content">
+              <HistoryTab token={token} />
+            </div>
           )}
-        </button>
-        {feedbackError && (
-          <p className="hint" style={{ marginTop: 10, color: 'var(--danger)' }}>
-            {feedbackError}
+        </section>
+
+        <section className="card settings-feedback-card">
+          <div className="section-head">
+            <span className="section-title">
+              <MessageSquare size={15} />
+              Beta feedback
+            </span>
+          </div>
+          <p className="hint" style={{ marginBottom: 12 }}>
+            Notice a bug, or have an idea for what would make this more useful? Send it here.
           </p>
-        )}
-      </section>
+          <div className="field">
+            <textarea
+              value={feedback}
+              onChange={e => setFeedback(e.target.value)}
+              rows={4}
+              placeholder="What's working, what's not, what you'd want next..."
+            />
+          </div>
+          <button
+            className="btn btn-ghost btn-block"
+            onClick={sendFeedback}
+            disabled={sendingFeedback || !feedback.trim()}
+          >
+            {sendingFeedback ? (
+              <span className="spinner spinner-accent" />
+            ) : feedbackSent ? (
+              <>
+                <Check size={16} /> Sent
+              </>
+            ) : (
+              'Send feedback'
+            )}
+          </button>
+          {feedbackError && (
+            <p className="hint" style={{ marginTop: 10, color: 'var(--danger)' }}>
+              {feedbackError}
+            </p>
+          )}
+        </section>
+      </div>
     </div>
   )
 }

@@ -58,8 +58,8 @@ export default function ThesisTab({ token, settings }: ThesisTabProps) {
   const estimatedCost = thesis ? ttsCost(thesis.content) : 0
 
   return (
-    <div className="stack-16">
-      <section className="card">
+    <div className="stack-16 thesis-workspace">
+      <section className="card thesis-reading-card">
         <div className="section-head">
           <span className="section-title">
             <TrendingUp size={15} />
@@ -74,68 +74,72 @@ export default function ThesisTab({ token, settings }: ThesisTabProps) {
           </div>
         ) : thesis ? (
           <>
-            <p className="meta-line" style={{ marginBottom: 12 }}>
-              Updated{' '}
-              {new Date(thesis.updated_at).toLocaleDateString('en-US', {
-                weekday: 'short',
-                month: 'short',
-                day: 'numeric',
-              })}
-            </p>
+            <aside className="thesis-meta-panel">
+              <p className="meta-line" style={{ marginBottom: 12 }}>
+                Updated{' '}
+                {new Date(thesis.updated_at).toLocaleDateString('en-US', {
+                  weekday: 'short',
+                  month: 'short',
+                  day: 'numeric',
+                })}
+              </p>
 
-            {audioSrc ? (
-              <div style={{ marginBottom: 16 }}>
-                <AudioPlayer
-                  src={audioSrc}
-                  downloadName={`dailydrop-thesis-v${thesis.version}.mp3`}
-                  title={`DailyDrop Thesis — v${thesis.version}`}
-                />
-                {audioCost !== null && (
-                  <p className="meta-line" style={{ marginTop: 10 }}>
-                    Audio cost: {formatCost(audioCost)}
+              {audioSrc ? (
+                <div style={{ marginBottom: 16 }}>
+                  <AudioPlayer
+                    src={audioSrc}
+                    downloadName={`dailydrop-thesis-v${thesis.version}.mp3`}
+                    title={`DailyDrop Thesis — v${thesis.version}`}
+                  />
+                  {audioCost !== null && (
+                    <p className="meta-line" style={{ marginTop: 10 }}>
+                      Audio cost: {formatCost(audioCost)}
+                    </p>
+                  )}
+                </div>
+              ) : confirming ? (
+                <div className="stack-8" style={{ marginBottom: 16 }}>
+                  <p className="hint">
+                    Generating audio for this thesis will cost approximately{' '}
+                    <strong style={{ color: 'var(--text-primary)' }}>{formatCost(estimatedCost)}</strong>.
                   </p>
-                )}
-              </div>
-            ) : confirming ? (
-              <div className="stack-8" style={{ marginBottom: 16 }}>
-                <p className="hint">
-                  Generating audio for this thesis will cost approximately{' '}
-                  <strong style={{ color: 'var(--text-primary)' }}>{formatCost(estimatedCost)}</strong>.
-                </p>
-                <button className="btn btn-primary btn-block" onClick={generateAudio}>
-                  <Headphones size={16} /> Confirm — generate for {formatCost(estimatedCost)}
+                  <button className="btn btn-primary btn-block" onClick={generateAudio}>
+                    <Headphones size={16} /> Confirm — generate for {formatCost(estimatedCost)}
+                  </button>
+                  <button className="btn btn-ghost btn-block" onClick={() => setConfirming(false)}>
+                    Cancel
+                  </button>
+                </div>
+              ) : (
+                <button
+                  className="btn btn-ghost btn-block"
+                  onClick={() => setConfirming(true)}
+                  disabled={generatingAudio}
+                  style={{ marginBottom: 16 }}
+                >
+                  {generatingAudio ? (
+                    <>
+                      <span className="spinner spinner-accent" /> Generating audio...
+                    </>
+                  ) : (
+                    <>
+                      <Headphones size={16} /> Listen to this thesis — {formatCost(estimatedCost)}
+                    </>
+                  )}
                 </button>
-                <button className="btn btn-ghost btn-block" onClick={() => setConfirming(false)}>
-                  Cancel
-                </button>
-              </div>
-            ) : (
-              <button
-                className="btn btn-ghost btn-block"
-                onClick={() => setConfirming(true)}
-                disabled={generatingAudio}
-                style={{ marginBottom: 16 }}
-              >
-                {generatingAudio ? (
-                  <>
-                    <span className="spinner spinner-accent" /> Generating audio...
-                  </>
-                ) : (
-                  <>
-                    <Headphones size={16} /> Listen to this thesis — {formatCost(estimatedCost)}
-                  </>
-                )}
-              </button>
-            )}
+              )}
 
-            {audioError && (
-              <div className="error-box" style={{ marginBottom: 16 }}>
-                <AlertTriangle size={16} style={{ flexShrink: 0, marginTop: 1 }} />
-                {audioError}
-              </div>
-            )}
+              {audioError && (
+                <div className="error-box" style={{ marginBottom: 16 }}>
+                  <AlertTriangle size={16} style={{ flexShrink: 0, marginTop: 1 }} />
+                  {audioError}
+                </div>
+              )}
+            </aside>
 
-            <ScriptView script={thesis.content} />
+            <article className="thesis-document">
+              <ScriptView script={thesis.content} />
+            </article>
           </>
         ) : (
           <p className="empty-text">

@@ -85,9 +85,9 @@ export default function HistoryTab({ token }: HistoryTabProps) {
   const previous = briefings.slice(PINNED_COUNT)
 
   return (
-    <div className="stack-16">
+    <div className="stack-16 history-list">
       {pinned.map(b => (
-        <section key={b.id} className="card">
+        <section key={b.id} className="card history-briefing-card">
           <div className="section-head" style={{ marginBottom: 8 }}>
             <span className="section-title">{formatDate(b.created_at)}</span>
             <button
@@ -132,7 +132,7 @@ export default function HistoryTab({ token }: HistoryTabProps) {
       ))}
 
       {previous.length > 0 && (
-        <section className="card">
+        <section className="card history-previous-card">
           <button className="collapse-head" onClick={() => setShowPrevious(s => !s)}>
             <span>Previous ({previous.length})</span>
             {showPrevious ? <ChevronUp size={16} /> : <ChevronDown size={16} />}

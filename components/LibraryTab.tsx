@@ -145,8 +145,8 @@ export default function LibraryTab({ token }: LibraryTabProps) {
   const canSave = title.trim().length > 0 && (Boolean(pdfFile) || content.trim().length >= 50)
 
   return (
-    <div className="stack-16">
-      <section className="card">
+    <div className="stack-16 library-workspace">
+      <section className="card library-controls-card">
         <div className="section-head">
           <span className="section-title">
             <Library size={15} />
@@ -254,39 +254,52 @@ export default function LibraryTab({ token }: LibraryTabProps) {
         )}
       </section>
 
-      {loading ? (
-        <div className="status-row" style={{ padding: '0 4px' }}>
-          <span className="dot dot-loading" /> Loading library
-        </div>
-      ) : (
-        documents.map(doc => (
-          <section key={doc.id} className="card">
-            <div className="section-head" style={{ marginBottom: 6 }}>
-              <span className="section-title">{doc.title}</span>
-              <button
-                className="btn-icon btn-icon-danger"
-                onClick={() => deleteDocument(doc.id)}
-                aria-label="Delete document"
-              >
-                <Trash2 size={15} />
-              </button>
+      <div className="library-document-grid">
+        {loading ? (
+          <div className="status-row" style={{ padding: '0 4px' }}>
+            <span className="dot dot-loading" /> Loading library
+          </div>
+        ) : documents.length === 0 ? (
+          <section className="card desktop-library-empty" aria-label="Empty knowledge library">
+            <div className="desktop-result-empty-icon">
+              <Library size={20} />
             </div>
-            <p className="meta-line" style={{ marginBottom: 8 }}>
-              Added{' '}
-              {new Date(doc.created_at).toLocaleDateString('en-US', {
-                month: 'short',
-                day: 'numeric',
-                year: 'numeric',
-              })}
+            <p className="section-title">Your research library is ready</p>
+            <p className="empty-text">
+              Add an earnings report, research note, or source document. Its summary will appear
+              here and become durable context for future briefings.
             </p>
-            {doc.summary && (
-              <p style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
-                {doc.summary}
-              </p>
-            )}
           </section>
-        ))
-      )}
+        ) : (
+          documents.map(doc => (
+            <section key={doc.id} className="card library-document-card">
+              <div className="section-head" style={{ marginBottom: 6 }}>
+                <span className="section-title">{doc.title}</span>
+                <button
+                  className="btn-icon btn-icon-danger"
+                  onClick={() => deleteDocument(doc.id)}
+                  aria-label="Delete document"
+                >
+                  <Trash2 size={15} />
+                </button>
+              </div>
+              <p className="meta-line" style={{ marginBottom: 8 }}>
+                Added{' '}
+                {new Date(doc.created_at).toLocaleDateString('en-US', {
+                  month: 'short',
+                  day: 'numeric',
+                  year: 'numeric',
+                })}
+              </p>
+              {doc.summary && (
+                <p className="library-document-summary">
+                  {doc.summary}
+                </p>
+              )}
+            </section>
+          ))
+        )}
+      </div>
     </div>
   )
 }
