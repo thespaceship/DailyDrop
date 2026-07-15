@@ -19,14 +19,26 @@ export interface PriceQuote {
 }
 
 // Twelve Data's free tier caps at 8 credits/minute (1 credit per symbol
-// looked up), which a single briefing generation can burn through on its
-// own once thesis and curated-watchlist updates run right after. This
-// process-local cache lets those back-to-back calls reuse the same quote
-// instead of re-querying, on both warm serverless instances and local dev.
-// "Not found" is cached too, so a bad/delisted ticker isn't retried on
+// looked up) — a single request for more symbols than that is rejected
+// outright, not just throttled, so anyone tracking more than ~7-8 tickers
+// can never get them all in one call. Quotes are cached for several
+// minutes (long relative to the per-minute cap) so once a ticker is
+// resolved it stays displayed while other tickers get their turn, and
+// "not found" is cached too so a bad/delisted ticker isn't retried on
 // every call within the window.
-const CACHE_TTL_MS = 60_000
+const CACHE_TTL_MS = 5 * 60_000
 const quoteCache = new Map<string, { quote: PriceQuote; expiresAt: number }>()
+
+// A single quote request costs 1 credit per symbol, so a batch larger than
+// the per-minute cap gets rejected outright. Capping how many uncached
+// tickers one getQuotes() call attempts keeps each call within budget.
+// Tickers beyond the cap are left unresolved this call — not attempted,
+// not cached — and lastAttemptAt below ensures the *next* call prioritizes
+// whichever tickers have gone longest without being tried, so the full
+// list rotates through and converges instead of the same leading tickers
+// winning every time.
+const MAX_TICKERS_PER_CALL = 6
+const lastAttemptAt = new Map<string, number>()
 
 interface TwelveDataQuote {
   close?: string
@@ -90,8 +102,15 @@ export async function getQuotes(tickers: string[]): Promise<Map<string, PriceQuo
   }
   if (toFetch.length === 0) return result
 
-  const fetched = await resolveQuotes(toFetch)
-  for (const ticker of toFetch) {
+  // Least-recently-attempted first, so a ticker that missed out on a
+  // previous call's budget gets priority this time rather than the same
+  // leading tickers winning every call.
+  toFetch.sort((a, b) => (lastAttemptAt.get(a) ?? 0) - (lastAttemptAt.get(b) ?? 0))
+  const batch = toFetch.slice(0, MAX_TICKERS_PER_CALL)
+  for (const ticker of batch) lastAttemptAt.set(ticker, now)
+
+  const fetched = await resolveQuotes(batch)
+  for (const ticker of batch) {
     const quote = fetched.get(ticker) ?? { ticker, price: null, changePercent: null }
     quoteCache.set(ticker, { quote, expiresAt: now + CACHE_TTL_MS })
     result.set(ticker, quote)
