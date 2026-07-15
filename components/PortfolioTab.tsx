@@ -357,12 +357,10 @@ function ManualList({
         />
         {showPercent && (
           <input
-            type="number"
-            min={0}
-            max={100}
-            step="0.1"
+            type="text"
+            inputMode="decimal"
             value={percent}
-            onChange={e => setPercent(e.target.value)}
+            onChange={e => setPercent(e.target.value.replace(/[^0-9.]/g, ''))}
             onKeyDown={e => e.key === 'Enter' && submit()}
             placeholder="%"
             style={{ maxWidth: 70 }}
@@ -458,16 +456,36 @@ function PercentField({
     if (next !== value) await onChange(next)
   }
 
+  if (!editing) {
+    return (
+      <button
+        type="button"
+        className="btn-ghost"
+        onClick={() => setEditing(true)}
+        style={{
+          minWidth: 44,
+          textAlign: 'right',
+          background: 'none',
+          border: 'none',
+          color: value === null ? 'var(--text-secondary)' : 'var(--text-primary)',
+          font: 'inherit',
+          cursor: 'pointer',
+          padding: '4px 2px',
+        }}
+      >
+        {value === null ? 'Set %' : `${formatPercent(value)}%`}
+      </button>
+    )
+  }
+
   return (
     <input
-      type="number"
-      min={0}
-      max={100}
-      step="0.1"
+      type="text"
+      inputMode="decimal"
+      autoFocus
       value={draft}
       placeholder="%"
-      onFocus={() => setEditing(true)}
-      onChange={e => setDraft(e.target.value)}
+      onChange={e => setDraft(e.target.value.replace(/[^0-9.]/g, ''))}
       onBlur={save}
       onKeyDown={e => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
       style={{ maxWidth: 60, textAlign: 'right' }}
