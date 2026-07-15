@@ -465,8 +465,9 @@ export default function HomeTab({ token, settings }: HomeTabProps) {
   const estimatedAudioCost = script ? ttsCost(script) : 0
 
   return (
-    <div className="stack-16">
-      <section className="card">
+    <div className="stack-16 home-workspace">
+      <div className="home-source-column">
+        <section className="card">
         <div className="section-head">
           <span className="section-title">
             <Youtube size={15} />
@@ -517,9 +518,9 @@ export default function HomeTab({ token, settings }: HomeTabProps) {
             </button>
           </div>
         ))}
-      </section>
+        </section>
 
-      <section className="card">
+        <section className="card">
         <div className="section-head">
           <span className="section-title">
             <Mail size={15} />
@@ -559,33 +560,49 @@ export default function HomeTab({ token, settings }: HomeTabProps) {
             </div>
           ))
         )}
-      </section>
+        </section>
 
-      {busy && wakeLockStatus === 'unavailable' && (
-        <div className="warning-box">
-          <AlertTriangle size={16} style={{ flexShrink: 0, marginTop: 1 }} />
-          This device can&apos;t keep the screen from auto-locking during generation. Keep the
-          screen on and this tab in view until it finishes — locking the screen may interrupt it.
-        </div>
-      )}
+        {busy && wakeLockStatus === 'unavailable' && (
+          <div className="warning-box">
+            <AlertTriangle size={16} style={{ flexShrink: 0, marginTop: 1 }} />
+            This device can&apos;t keep the screen from auto-locking during generation. Keep the
+            screen on and this tab in view until it finishes — locking the screen may interrupt it.
+          </div>
+        )}
 
-      {step !== 'awaiting-audio-decision' && (
-        <button className="btn btn-primary btn-block" onClick={generate} disabled={!canGenerate}>
-          {busy ? (
-            <>
-              <span className="spinner" /> {STEP_LABELS[step] || 'Working...'}
-            </>
-          ) : step === 'done' ? (
-            <>
-              <RefreshCw size={16} /> Regenerate
-            </>
-          ) : (
-            <>
-              <Play size={16} /> Generate today&apos;s briefing
-            </>
-          )}
-        </button>
-      )}
+        {step !== 'awaiting-audio-decision' && (
+          <button className="btn btn-primary btn-block" onClick={generate} disabled={!canGenerate}>
+            {busy ? (
+              <>
+                <span className="spinner" /> {STEP_LABELS[step] || 'Working...'}
+              </>
+            ) : step === 'done' ? (
+              <>
+                <RefreshCw size={16} /> Regenerate
+              </>
+            ) : (
+              <>
+                <Play size={16} /> Generate today&apos;s briefing
+              </>
+            )}
+          </button>
+        )}
+      </div>
+
+      <div className="home-result-column">
+        {step === 'idle' && !script && !audioSrc && (
+          <section className="card desktop-result-empty" aria-label="Briefing result">
+            <div className="desktop-result-empty-icon">
+              <FileText size={20} />
+            </div>
+            <p className="section-title">Today&apos;s briefing will appear here</p>
+            <p className="empty-text">
+              Add at least one ready video transcript or newsletter, then generate a dense research
+              memo. The script, audio decision, progress, and completed briefing stay together in
+              this workspace.
+            </p>
+          </section>
+        )}
 
       {step === 'awaiting-audio-decision' && (
         <section className="card">
@@ -680,6 +697,7 @@ export default function HomeTab({ token, settings }: HomeTabProps) {
           {showScript && <ScriptView script={script} />}
         </section>
       )}
+      </div>
     </div>
   )
 }

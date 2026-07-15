@@ -4,7 +4,7 @@ import { Home, TrendingUp, Library, Briefcase, Settings } from 'lucide-react'
 
 export type TabId = 'home' | 'thesis' | 'library' | 'portfolio' | 'settings'
 
-const TABS: { id: TabId; label: string; icon: typeof Home }[] = [
+export const TABS: { id: TabId; label: string; icon: typeof Home }[] = [
   { id: 'home', label: 'Home', icon: Home },
   { id: 'thesis', label: 'Thesis', icon: TrendingUp },
   { id: 'library', label: 'Library', icon: Library },

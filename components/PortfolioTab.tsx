@@ -219,31 +219,33 @@ export default function PortfolioTab({ token }: PortfolioTabProps) {
   }
 
   return (
-    <div className="stack-16">
+    <div className="stack-16 portfolio-workspace">
       {error && <div className="error-box">{error}</div>}
 
-      <ManualList
-        title="My Portfolio"
-        icon={<Briefcase size={15} />}
-        emptyText="Add the stocks you currently hold to keep track of them here."
-        items={portfolio}
-        onAdd={(ticker, note, percent) => addItem('portfolio', ticker, note, percent)}
-        onRemove={id => removeItem('portfolio', id)}
-        showPercent
-        onPercentChange={updatePercent}
-        curatedByTicker={curatedByTicker}
-      />
+      <div className="portfolio-manual-grid">
+        <ManualList
+          title="My Portfolio"
+          icon={<Briefcase size={15} />}
+          emptyText="Add the stocks you currently hold to keep track of them here."
+          items={portfolio}
+          onAdd={(ticker, note, percent) => addItem('portfolio', ticker, note, percent)}
+          onRemove={id => removeItem('portfolio', id)}
+          showPercent
+          onPercentChange={updatePercent}
+          curatedByTicker={curatedByTicker}
+        />
 
-      <ManualList
-        title="My Watchlist"
-        icon={<Eye size={15} />}
-        emptyText="Add tickers you're interested in but haven't invested in yet."
-        items={watchlist}
-        onAdd={(ticker, note) => addItem('watchlist', ticker, note, null)}
-        onRemove={id => removeItem('watchlist', id)}
-      />
+        <ManualList
+          title="My Watchlist"
+          icon={<Eye size={15} />}
+          emptyText="Add tickers you're interested in but haven't invested in yet."
+          items={watchlist}
+          onAdd={(ticker, note) => addItem('watchlist', ticker, note, null)}
+          onRemove={id => removeItem('watchlist', id)}
+        />
+      </div>
 
-      <section className="card">
+      <section className="card portfolio-curated-card">
         <div className="section-head">
           <span className="section-title">
             <Sparkles size={15} />
@@ -260,26 +262,32 @@ export default function PortfolioTab({ token }: PortfolioTabProps) {
             No entries yet — this fills in as briefings mention specific stocks worth watching.
           </p>
         ) : (
-          curated.map(item => (
-            <div key={item.id} className="item-row" style={{ alignItems: 'flex-start' }}>
-              <div className="item-main">
-                <div className="item-title mono">
-                  {item.ticker}
-                  {item.company_name && (
-                    <span className="text-secondary"> — {item.company_name}</span>
-                  )}
-                </div>
-                <CuratedDetails item={item} />
-              </div>
-              <button
-                className="btn-icon btn-icon-danger"
-                onClick={() => dismissCurated(item.id)}
-                aria-label="Dismiss"
+          <div className="portfolio-curated-list">
+            {curated.map(item => (
+              <div
+                key={item.id}
+                className="item-row portfolio-curated-item"
+                style={{ alignItems: 'flex-start' }}
               >
-                <X size={16} />
-              </button>
-            </div>
-          ))
+                <div className="item-main">
+                  <div className="item-title mono">
+                    {item.ticker}
+                    {item.company_name && (
+                      <span className="text-secondary"> — {item.company_name}</span>
+                    )}
+                  </div>
+                  <CuratedDetails item={item} />
+                </div>
+                <button
+                  className="btn-icon btn-icon-danger"
+                  onClick={() => dismissCurated(item.id)}
+                  aria-label="Dismiss"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+            ))}
+          </div>
         )}
       </section>
     </div>
@@ -331,7 +339,7 @@ function ManualList({
   const hasAnyPercent = items.some(i => i.percent_of_portfolio !== null)
 
   return (
-    <section className="card">
+    <section className="card manual-list-card">
       <div className="section-head">
         <span className="section-title">
           {icon}
@@ -339,7 +347,7 @@ function ManualList({
         </span>
         {items.length > 0 && <span className="badge">{items.length}</span>}
       </div>
-      <div className="input-row">
+      <div className="input-row portfolio-input-row">
         <input
           type="text"
           value={ticker}
