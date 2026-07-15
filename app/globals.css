@@ -44,9 +44,22 @@ body {
   font-family: var(--font-sans);
   font-size: 14px;
   line-height: 1.55;
-  min-height: 100vh;
+  height: 100%;
   -webkit-font-smoothing: antialiased;
   overscroll-behavior: none;
+}
+
+/* The page itself never scrolls — only .content does (see below). This is
+   deliberate: iOS Safari's auto-hiding URL bar resizes the viewport as the
+   page scrolls, and `position: fixed` bars can visually detach from the
+   viewport during that resize (worse on some iOS versions/devices than
+   others). Keeping the document height fixed and delegating scrolling to an
+   inner container sidesteps the bug entirely instead of fighting it. */
+body {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  overflow: hidden;
 }
 
 a {
@@ -59,15 +72,21 @@ a {
 .app {
   max-width: 480px;
   margin: 0 auto;
-  min-height: 100dvh;
+  width: 100%;
+  flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   background: var(--bg-primary);
+  overflow: hidden;
 }
 
 .content {
   flex: 1;
-  padding: 16px 16px 104px;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 16px 16px 24px;
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -76,8 +95,7 @@ a {
 /* ---------- Header ---------- */
 
 .header {
-  position: sticky;
-  top: 0;
+  flex-shrink: 0;
   z-index: 20;
   background: rgba(8, 8, 8, 0.92);
   backdrop-filter: blur(12px);
@@ -176,21 +194,14 @@ a {
 /* ---------- Bottom tab bar ---------- */
 
 .tabbar {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
+  flex-shrink: 0;
+  width: 100%;
   z-index: 20;
   background: rgba(8, 8, 8, 0.94);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   border-top: 1px solid var(--border);
   padding-bottom: env(safe-area-inset-bottom);
-  /* Forces its own compositing layer — without this, iOS Safari can visually
-     detach fixed + backdrop-filter elements from the viewport during
-     momentum scrolling, making the bar appear to float. */
-  transform: translateZ(0);
-  will-change: transform;
 }
 
 .tabbar-inner {
@@ -556,6 +567,19 @@ select option {
   line-height: 1.5;
 }
 
+.warning-box {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  background: var(--warning-subtle);
+  border: 1px solid rgba(217, 119, 6, 0.35);
+  border-radius: var(--radius-card);
+  color: #f0c78a;
+  font-size: 13px;
+  padding: 12px 14px;
+  line-height: 1.5;
+}
+
 /* ---------- Script / memo rendering ---------- */
 
 .memo {
@@ -751,7 +775,7 @@ select option {
   }
 
   .content {
-    padding: 28px 24px 132px;
+    padding: 28px 24px 36px;
     gap: 24px;
   }
 

@@ -460,7 +460,7 @@ export default function HomeTab({ token, settings }: HomeTabProps) {
   // Keep the screen awake for the entire generation pipeline, not just
   // playback — otherwise the phone can auto-lock mid-generation, which
   // interrupts in-flight requests and can wipe in-progress UI state.
-  useWakeLock(busy)
+  const wakeLockStatus = useWakeLock(busy)
 
   const estimatedAudioCost = script ? ttsCost(script) : 0
 
@@ -560,6 +560,14 @@ export default function HomeTab({ token, settings }: HomeTabProps) {
           ))
         )}
       </section>
+
+      {busy && wakeLockStatus === 'unavailable' && (
+        <div className="warning-box">
+          <AlertTriangle size={16} style={{ flexShrink: 0, marginTop: 1 }} />
+          This device can&apos;t keep the screen from auto-locking during generation. Keep the
+          screen on and this tab in view until it finishes — locking the screen may interrupt it.
+        </div>
+      )}
 
       {step !== 'awaiting-audio-decision' && (
         <button className="btn btn-primary btn-block" onClick={generate} disabled={!canGenerate}>
