@@ -59,12 +59,17 @@ export interface WatchlistItem {
 
 export type WatchlistSentiment = 'attractive' | 'monitor' | 'reducing' | 'exit'
 
+export type StockOutlook = 'sell_strong' | 'sell' | 'neutral' | 'buy' | 'buy_strong'
+
 export interface CuratedWatchlistItem {
   id: string
   ticker: string
   company_name: string | null
   sentiment: WatchlistSentiment | null
   rationale: string | null
+  outlook_1m: StockOutlook | null
+  outlook_6m: StockOutlook | null
+  outlook_12m: StockOutlook | null
   first_seen_at: string
   last_seen_at: string
 }

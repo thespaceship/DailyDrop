@@ -1,8 +1,14 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { AlertTriangle, Briefcase, Eye, Sparkles, X, Plus } from 'lucide-react'
-import type { CuratedWatchlistItem, ListType, WatchlistItem, WatchlistSentiment } from '@/lib/types'
+import type {
+  CuratedWatchlistItem,
+  ListType,
+  StockOutlook,
+  WatchlistItem,
+  WatchlistSentiment,
+} from '@/lib/types'
 
 interface PortfolioTabProps {
   token: string
@@ -20,6 +26,97 @@ const SENTIMENT_DOT: Record<WatchlistSentiment, string> = {
   monitor: 'dot-warning',
   reducing: 'dot-warning',
   exit: 'dot-danger',
+}
+
+const OUTLOOK_COLUMNS: { key: StockOutlook; label: string }[] = [
+  { key: 'sell_strong', label: 'SELL!' },
+  { key: 'sell', label: 'Sell' },
+  { key: 'neutral', label: 'Ntrl' },
+  { key: 'buy', label: 'Buy' },
+  { key: 'buy_strong', label: 'BUY!' },
+]
+
+const OUTLOOK_COLORS: Record<StockOutlook, string> = {
+  sell_strong: '#dc2626',
+  sell: '#d97706',
+  neutral: '#eab308',
+  buy: '#86efac',
+  buy_strong: '#16a34a',
+}
+
+const OUTLOOK_HORIZONS: { key: 'outlook_1m' | 'outlook_6m' | 'outlook_12m'; label: string }[] = [
+  { key: 'outlook_1m', label: '1 month' },
+  { key: 'outlook_6m', label: '6 month' },
+  { key: 'outlook_12m', label: '12 month' },
+]
+
+function SentimentMeter({ item }: { item: CuratedWatchlistItem }) {
+  const rows = OUTLOOK_HORIZONS.filter(h => item[h.key] !== null)
+  if (rows.length === 0) return null
+
+  return (
+    <div style={{ marginTop: 8 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '56px repeat(5, 1fr)', gap: 4 }}>
+        <div />
+        {OUTLOOK_COLUMNS.map(c => (
+          <div
+            key={c.key}
+            style={{ fontSize: 10, color: 'var(--text-secondary)', textAlign: 'center' }}
+          >
+            {c.label}
+          </div>
+        ))}
+      </div>
+      {rows.map(h => {
+        const value = item[h.key] as StockOutlook
+        return (
+          <div
+            key={h.key}
+            style={{
+              display: 'grid',
+              gridTemplateColumns: '56px repeat(5, 1fr)',
+              gap: 4,
+              marginTop: 4,
+              alignItems: 'center',
+            }}
+          >
+            <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{h.label}</div>
+            {OUTLOOK_COLUMNS.map(c => (
+              <div
+                key={c.key}
+                style={{
+                  height: 8,
+                  borderRadius: 4,
+                  background: OUTLOOK_COLORS[c.key],
+                  opacity: c.key === value ? 1 : 0.25,
+                  outline: c.key === value ? '2px solid var(--text-primary)' : 'none',
+                }}
+              />
+            ))}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+function CuratedDetails({ item }: { item: CuratedWatchlistItem }) {
+  return (
+    <>
+      {item.sentiment && (
+        <div className="status-row" style={{ marginTop: 3 }}>
+          <span className={`dot ${SENTIMENT_DOT[item.sentiment]}`} />
+          {SENTIMENT_LABEL[item.sentiment]}
+        </div>
+      )}
+      {item.rationale && (
+        <div className="item-sub" style={{ marginTop: 3, whiteSpace: 'normal' }}>
+          {item.rationale}
+        </div>
+      )}
+      <SentimentMeter item={item} />
+    </>
+  )
 }
 
 export default function PortfolioTab({ token }: PortfolioTabProps) {
@@ -108,6 +205,11 @@ export default function PortfolioTab({ token }: PortfolioTabProps) {
     if (res.ok) setCurated(prev => prev.filter(i => i.id !== id))
   }
 
+  const curatedByTicker = useMemo(
+    () => new Map(curated.map(item => [item.ticker, item])),
+    [curated]
+  )
+
   if (loading) {
     return (
       <div className="status-row" style={{ padding: '0 4px' }}>
@@ -129,6 +231,7 @@ export default function PortfolioTab({ token }: PortfolioTabProps) {
         onRemove={id => removeItem('portfolio', id)}
         showPercent
         onPercentChange={updatePercent}
+        curatedByTicker={curatedByTicker}
       />
 
       <ManualList
@@ -166,17 +269,7 @@ export default function PortfolioTab({ token }: PortfolioTabProps) {
                     <span className="text-secondary"> — {item.company_name}</span>
                   )}
                 </div>
-                {item.sentiment && (
-                  <div className="status-row" style={{ marginTop: 3 }}>
-                    <span className={`dot ${SENTIMENT_DOT[item.sentiment]}`} />
-                    {SENTIMENT_LABEL[item.sentiment]}
-                  </div>
-                )}
-                {item.rationale && (
-                  <div className="item-sub" style={{ marginTop: 3, whiteSpace: 'normal' }}>
-                    {item.rationale}
-                  </div>
-                )}
+                <CuratedDetails item={item} />
               </div>
               <button
                 className="btn-icon btn-icon-danger"
@@ -202,6 +295,7 @@ interface ManualListProps {
   onRemove: (id: string) => void
   showPercent?: boolean
   onPercentChange?: (id: string, percent: number | null) => Promise<void>
+  curatedByTicker?: Map<string, CuratedWatchlistItem>
 }
 
 function ManualList({
@@ -213,6 +307,7 @@ function ManualList({
   onRemove,
   showPercent,
   onPercentChange,
+  curatedByTicker,
 }: ManualListProps) {
   const [ticker, setTicker] = useState('')
   const [note, setNote] = useState('')
@@ -281,27 +376,42 @@ function ManualList({
         <p className="empty-text">{emptyText}</p>
       ) : (
         <>
-          {items.map(item => (
-            <div key={item.id} className="item-row">
-              <div className="item-main">
-                <div className="item-title mono">{item.ticker}</div>
-                {item.note && <div className="item-sub">{item.note}</div>}
-              </div>
-              {showPercent && onPercentChange && (
-                <PercentField
-                  value={item.percent_of_portfolio}
-                  onChange={value => onPercentChange(item.id, value)}
-                />
-              )}
-              <button
-                className="btn-icon btn-icon-danger"
-                onClick={() => onRemove(item.id)}
-                aria-label="Remove"
+          {items.map(item => {
+            const curatedMatch = curatedByTicker?.get(item.ticker)
+            return (
+              <div
+                key={item.id}
+                className="item-row"
+                style={curatedMatch ? { flexDirection: 'column', alignItems: 'stretch' } : undefined}
               >
-                <X size={16} />
-              </button>
-            </div>
-          ))}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%' }}>
+                  <div className="item-main">
+                    <div className="item-title mono">
+                      {item.ticker}
+                      {curatedMatch?.company_name && (
+                        <span className="text-secondary"> — {curatedMatch.company_name}</span>
+                      )}
+                    </div>
+                    {item.note && <div className="item-sub">{item.note}</div>}
+                  </div>
+                  {showPercent && onPercentChange && (
+                    <PercentField
+                      value={item.percent_of_portfolio}
+                      onChange={value => onPercentChange(item.id, value)}
+                    />
+                  )}
+                  <button
+                    className="btn-icon btn-icon-danger"
+                    onClick={() => onRemove(item.id)}
+                    aria-label="Remove"
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+                {curatedMatch && <CuratedDetails item={curatedMatch} />}
+              </div>
+            )
+          })}
           {showPercent && hasAnyPercent && total > 100.001 && (
             <div className="warning-box" style={{ marginTop: 10 }}>
               <AlertTriangle size={15} style={{ flexShrink: 0, marginTop: 1 }} />

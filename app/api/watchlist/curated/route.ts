@@ -5,12 +5,13 @@ import { isValidOwnerToken, ownerFromRequest } from '@/lib/owner'
 import { normalizeTicker, parseJsonLoose } from '@/lib/textUtils'
 import { claudeCost } from '@/lib/pricing'
 import { logApiUsage } from '@/lib/usageLog'
-import type { WatchlistSentiment } from '@/lib/types'
+import type { StockOutlook, WatchlistSentiment } from '@/lib/types'
 
 export const maxDuration = 180
 
 const MAX_ENTRIES = 15
 const VALID_SENTIMENTS = new Set<WatchlistSentiment>(['attractive', 'monitor', 'reducing', 'exit'])
+const VALID_OUTLOOKS = new Set<StockOutlook>(['sell_strong', 'sell', 'neutral', 'buy', 'buy_strong'])
 
 interface CuratedRow {
   id: string
@@ -18,9 +19,18 @@ interface CuratedRow {
   company_name: string | null
   sentiment: string | null
   rationale: string | null
+  outlook_1m: string | null
+  outlook_6m: string | null
+  outlook_12m: string | null
   first_seen_at: string
   last_seen_at: string
   dismissed: boolean
+}
+
+function parseOutlook(value: unknown): StockOutlook | null {
+  return typeof value === 'string' && VALID_OUTLOOKS.has(value as StockOutlook)
+    ? (value as StockOutlook)
+    : null
 }
 
 export async function GET(req: NextRequest) {
@@ -32,7 +42,7 @@ export async function GET(req: NextRequest) {
 
     const items = await sbSelect<CuratedRow>(
       'curated_watchlist',
-      `owner=eq.${encodeURIComponent(owner)}&dismissed=eq.false&select=id,ticker,company_name,sentiment,rationale,first_seen_at,last_seen_at&order=last_seen_at.desc`
+      `owner=eq.${encodeURIComponent(owner)}&dismissed=eq.false&select=id,ticker,company_name,sentiment,rationale,outlook_1m,outlook_6m,outlook_12m,first_seen_at,last_seen_at&order=last_seen_at.desc`
     )
     return NextResponse.json({ items })
   } catch (err) {
@@ -90,7 +100,7 @@ export async function POST(req: NextRequest) {
     const [existing, thesisRows] = await Promise.all([
       sbSelect<CuratedRow>(
         'curated_watchlist',
-        `owner=eq.${encodeURIComponent(owner)}&select=id,ticker,company_name,sentiment,rationale,dismissed&order=last_seen_at.desc`
+        `owner=eq.${encodeURIComponent(owner)}&select=id,ticker,company_name,sentiment,rationale,outlook_1m,outlook_6m,outlook_12m,dismissed&order=last_seen_at.desc`
       ),
       sbTrySelect<ThesisRow>(
         'investment_thesis',
@@ -103,7 +113,10 @@ export async function POST(req: NextRequest) {
 
     const currentListText = activeExisting.length
       ? activeExisting
-          .map(e => `${e.ticker} (${e.company_name || 'unknown'}) — ${e.sentiment}: ${e.rationale}`)
+          .map(e => {
+            const outlookText = `outlook 1m/6m/12m: ${e.outlook_1m ?? 'none'}/${e.outlook_6m ?? 'none'}/${e.outlook_12m ?? 'none'}`
+            return `${e.ticker} (${e.company_name || 'unknown'}) — ${e.sentiment}: ${e.rationale} (${outlookText})`
+          })
           .join('\n')
       : 'Empty — no tickers tracked yet.'
 
@@ -122,14 +135,15 @@ Produce an updated watchlist reflecting tickers with clear investment relevance 
 - Use the official stock ticker symbol (e.g. AAPL, not "Apple")
 - Assign a sentiment: exactly one of "attractive", "monitor", "reducing", "exit"
 - Give a one-sentence rationale specific to why it's on the list
+- Give a directional outlook for each of 3 time horizons — 1 month, 6 months, 12 months — each exactly one of "sell_strong", "sell", "neutral", "buy", "buy_strong". Only assign a value for a horizon if the material above gives you a real, specific basis for a directional call at that horizon; otherwise use null for that horizon. Do not guess just to fill it in.
 
 Rules:
-- Build on the current list — refine sentiment/rationale for tickers still relevant, drop ones no longer supported by the evidence, add new ones from today's insights
+- Build on the current list — refine sentiment/rationale/outlook for tickers still relevant, drop ones no longer supported by the evidence, add new ones from today's insights
 - Maximum ${MAX_ENTRIES} tickers total — prioritize the highest-conviction, most relevant names if there would be more
 - Only include tickers with a real, specific basis in the material above — do not invent or pad the list
 
 Output ONLY a JSON array, nothing else, in this exact shape:
-[{"ticker": "AAPL", "companyName": "Apple Inc.", "sentiment": "attractive", "rationale": "..."}]`
+[{"ticker": "AAPL", "companyName": "Apple Inc.", "sentiment": "attractive", "rationale": "...", "outlook": {"oneMonth": "buy", "sixMonth": null, "twelveMonth": "buy_strong"}}]`
 
     const { text, usage } = await callClaude(prompt, 1500)
     const parsed = parseJsonLoose(text)
@@ -158,6 +172,12 @@ Output ONLY a JSON array, nothing else, in this exact shape:
         : null
       const companyName = String((raw as Record<string, unknown>).companyName || '').slice(0, 200) || null
       const rationale = String((raw as Record<string, unknown>).rationale || '').slice(0, 500) || null
+      const outlookRaw = (raw as Record<string, unknown>).outlook
+      const outlook =
+        outlookRaw && typeof outlookRaw === 'object' ? (outlookRaw as Record<string, unknown>) : {}
+      const outlook1m = parseOutlook(outlook.oneMonth)
+      const outlook6m = parseOutlook(outlook.sixMonth)
+      const outlook12m = parseOutlook(outlook.twelveMonth)
 
       const existingRow = existingByTicker.get(ticker)
       const now = new Date().toISOString()
@@ -167,6 +187,9 @@ Output ONLY a JSON array, nothing else, in this exact shape:
           company_name: companyName,
           sentiment,
           rationale,
+          outlook_1m: outlook1m,
+          outlook_6m: outlook6m,
+          outlook_12m: outlook12m,
           last_seen_at: now,
         })
       } else {
@@ -176,6 +199,9 @@ Output ONLY a JSON array, nothing else, in this exact shape:
           company_name: companyName,
           sentiment,
           rationale,
+          outlook_1m: outlook1m,
+          outlook_6m: outlook6m,
+          outlook_12m: outlook12m,
           first_seen_at: now,
           last_seen_at: now,
           dismissed: false,
