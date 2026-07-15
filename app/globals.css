@@ -48,23 +48,28 @@ body {
   overscroll-behavior: none;
 }
 
-/* The document scrolls normally — no fixed-height shell. The header and tab
-   bar use `position: sticky` instead of `position: fixed` — sticky
-   participates in normal document flow, so iOS never has to "re-anchor" it
-   against a resizing viewport, which was causing it to visually float away
-   from the bottom mid-scroll.
+/* The app shell is always exactly one viewport tall, whether or not the
+   active tab's content is long enough to need scrolling — only `.content`
+   (below) scrolls internally. This was deliberate: letting the *document*
+   itself scroll only when a tab's content happened to be tall enough (the
+   previous approach) meant the layout behaved differently tab-to-tab —
+   e.g. a gap appeared below the tab bar specifically on the short Home tab
+   but not on the longer Thesis tab. iOS/WKWebView's safe-area and height
+   accounting isn't consistent between a scrollable and a non-scrollable
+   page, so the fix is to never let that distinction exist: the shell's
+   scrollability is now fixed regardless of tab content.
 
    Height comes from `--app-height`, which useViewportHeight() keeps pinned
-   to the real window.innerHeight, re-measured repeatedly right after a cold
-   launch. Plain `100dvh` is only the pre-JS fallback: on a true cold launch
-   (not just resuming), iOS can report a taller-than-real height on first
-   paint before it finishes settling, leaving a gap of background below the
-   tab bar until something else forces a layout recalculation. */
+   to the real window.innerHeight, re-measured repeatedly after mount (a
+   true cold launch can report a taller-than-real height on first paint
+   before iOS finishes settling). Plain `100dvh` is only the pre-JS
+   fallback. */
 body {
   display: flex;
   flex-direction: column;
-  min-height: 100dvh;
-  min-height: var(--app-height, 100dvh);
+  height: 100dvh;
+  height: var(--app-height, 100dvh);
+  overflow: hidden;
 }
 
 a {
@@ -79,13 +84,18 @@ a {
   margin: 0 auto;
   width: 100%;
   flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   background: var(--bg-primary);
+  overflow: hidden;
 }
 
 .content {
   flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
   padding: 16px 16px 24px;
   display: flex;
   flex-direction: column;
@@ -95,8 +105,6 @@ a {
 /* ---------- Header ---------- */
 
 .header {
-  position: sticky;
-  top: 0;
   flex-shrink: 0;
   z-index: 20;
   background: rgba(8, 8, 8, 0.92);
@@ -196,8 +204,6 @@ a {
 /* ---------- Bottom tab bar ---------- */
 
 .tabbar {
-  position: sticky;
-  bottom: 0;
   flex-shrink: 0;
   width: 100%;
   z-index: 20;
