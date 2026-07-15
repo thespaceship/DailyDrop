@@ -44,29 +44,23 @@ body {
   font-family: var(--font-sans);
   font-size: 14px;
   line-height: 1.55;
-  height: 100%;
   -webkit-font-smoothing: antialiased;
   overscroll-behavior: none;
 }
 
-/* The page itself never scrolls — only .content does (see below). This is
-   deliberate: iOS Safari's auto-hiding URL bar resizes the viewport as the
-   page scrolls, and `position: fixed` bars can visually detach from the
-   viewport during that resize (worse on some iOS versions/devices than
-   others). Keeping the document height fixed and delegating scrolling to an
-   inner container sidesteps the bug entirely instead of fighting it.
-
-   Height comes from `--app-height`, a variable useViewportHeight() keeps
-   pinned to window.visualViewport's real height. Plain `100dvh` is the
-   fallback for the brief moment before that JS runs — iOS Safari doesn't
-   reliably recompute `dvh` when its toolbar shows/hides, which left a gap
-   of bare background below the tab bar once the toolbar collapsed. */
+/* The document scrolls normally (no fixed-height shell, no manual viewport
+   measuring — both were tried here and both broke on real devices: one
+   left the tab bar floating mid-scroll on an iPhone 16e, the other left a
+   gap below it in standalone/home-screen mode on an iPhone 15 Pro, because
+   iOS's `dvh`/visualViewport reporting isn't consistent enough to build a
+   pixel-exact shell on top of). The header and tab bar use `position:
+   sticky` instead of `position: fixed` — sticky participates in normal
+   document flow, so iOS never has to "re-anchor" it against a resizing
+   viewport, which is what was causing both bugs. */
 body {
   display: flex;
   flex-direction: column;
-  height: 100dvh;
-  height: var(--app-height, 100dvh);
-  overflow: hidden;
+  min-height: 100dvh;
 }
 
 a {
@@ -81,18 +75,13 @@ a {
   margin: 0 auto;
   width: 100%;
   flex: 1;
-  min-height: 0;
   display: flex;
   flex-direction: column;
   background: var(--bg-primary);
-  overflow: hidden;
 }
 
 .content {
   flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
   padding: 16px 16px 24px;
   display: flex;
   flex-direction: column;
@@ -102,6 +91,8 @@ a {
 /* ---------- Header ---------- */
 
 .header {
+  position: sticky;
+  top: 0;
   flex-shrink: 0;
   z-index: 20;
   background: rgba(8, 8, 8, 0.92);
@@ -201,6 +192,8 @@ a {
 /* ---------- Bottom tab bar ---------- */
 
 .tabbar {
+  position: sticky;
+  bottom: 0;
   flex-shrink: 0;
   width: 100%;
   z-index: 20;
