@@ -53,6 +53,7 @@ export interface WatchlistItem {
   list_type: ListType
   ticker: string
   note: string | null
+  percent_of_portfolio: number | null
   created_at: string
 }
 

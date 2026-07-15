@@ -19,6 +19,11 @@ interface BriefingSourcesRow {
   video_urls: string[] | null
 }
 
+interface PortfolioRow {
+  ticker: string
+  percent_of_portfolio: number | null
+}
+
 export async function GET(req: NextRequest) {
   try {
     const owner = ownerFromRequest(req)
@@ -77,6 +82,26 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    const portfolioRows = await sbTrySelect<PortfolioRow>(
+      'watchlist_items',
+      `owner=eq.${encodeURIComponent(owner)}&list_type=eq.portfolio&select=ticker,percent_of_portfolio&order=percent_of_portfolio.desc.nullslast`
+    )
+    let portfolioNote = ''
+    if (portfolioRows.length > 0) {
+      const weighted = portfolioRows.filter(r => r.percent_of_portfolio !== null)
+      const holdingsText = portfolioRows
+        .map(r =>
+          r.percent_of_portfolio !== null ? `${r.ticker} (${r.percent_of_portfolio}%)` : r.ticker
+        )
+        .join(', ')
+      const allocated = weighted.reduce((sum, r) => sum + (r.percent_of_portfolio ?? 0), 0)
+      const unspecifiedNote =
+        weighted.length > 0 && allocated < 100
+          ? ` ${(100 - allocated).toFixed(1)}% of the portfolio is unweighted or held in positions not listed here.`
+          : ''
+      portfolioNote = `\n\nUSER'S CURRENT PORTFOLIO HOLDINGS: ${holdingsText}.${unspecifiedNote} Use this weighting to inform which positions carry more or less significance in the thesis — a heavily weighted holding deserves more scrutiny than a small one.`
+    }
+
     const today = new Date().toLocaleDateString('en-US', {
       weekday: 'long',
       year: 'numeric',
@@ -92,7 +117,7 @@ CURRENT THESIS (from previous analysis):
 ${current?.content || 'No thesis exists yet. Create the first version from today\'s insights.'}
 
 TODAY'S NEW INSIGHTS:
-${insights}${repeatedSourcesNote}
+${insights}${repeatedSourcesNote}${portfolioNote}
 
 Update the investment thesis by integrating today's insights. The thesis should:
 - Build on and refine previous positions, not replace them
