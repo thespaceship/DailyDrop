@@ -18,6 +18,16 @@ export interface PriceQuote {
   changePercent: number | null
 }
 
+// Twelve Data's free tier caps at 8 credits/minute (1 credit per symbol
+// looked up), which a single briefing generation can burn through on its
+// own once thesis and curated-watchlist updates run right after. This
+// process-local cache lets those back-to-back calls reuse the same quote
+// instead of re-querying, on both warm serverless instances and local dev.
+// "Not found" is cached too, so a bad/delisted ticker isn't retried on
+// every call within the window.
+const CACHE_TTL_MS = 60_000
+const quoteCache = new Map<string, { quote: PriceQuote; expiresAt: number }>()
+
 interface TwelveDataQuote {
   close?: string
   percent_change?: string
@@ -67,6 +77,31 @@ export async function getQuotes(tickers: string[]): Promise<Map<string, PriceQuo
   const unique = Array.from(new Set(tickers.map(t => t.trim().toUpperCase()).filter(Boolean)))
   const result = new Map<string, PriceQuote>()
   if (unique.length === 0) return result
+
+  const now = Date.now()
+  const toFetch: string[] = []
+  for (const ticker of unique) {
+    const cached = quoteCache.get(ticker)
+    if (cached && cached.expiresAt > now) {
+      result.set(ticker, cached.quote)
+    } else {
+      toFetch.push(ticker)
+    }
+  }
+  if (toFetch.length === 0) return result
+
+  const fetched = await resolveQuotes(toFetch)
+  for (const ticker of toFetch) {
+    const quote = fetched.get(ticker) ?? { ticker, price: null, changePercent: null }
+    quoteCache.set(ticker, { quote, expiresAt: now + CACHE_TTL_MS })
+    result.set(ticker, quote)
+  }
+
+  return result
+}
+
+async function resolveQuotes(unique: string[]): Promise<Map<string, PriceQuote>> {
+  const result = new Map<string, PriceQuote>()
 
   const knownCrypto = unique.filter(t => CRYPTO_SYMBOLS.has(t))
   const rest = unique.filter(t => !CRYPTO_SYMBOLS.has(t))
