@@ -7,7 +7,7 @@ import { claudeCost } from '@/lib/pricing'
 import { logApiUsage } from '@/lib/usageLog'
 import type { WatchlistSentiment } from '@/lib/types'
 
-export const maxDuration = 60
+export const maxDuration = 180
 
 const MAX_ENTRIES = 15
 const VALID_SENTIMENTS = new Set<WatchlistSentiment>(['attractive', 'monitor', 'reducing', 'exit'])

@@ -5,7 +5,7 @@ import { isValidOwnerToken, ownerFromRequest } from '@/lib/owner'
 import { claudeCost } from '@/lib/pricing'
 import { logApiUsage } from '@/lib/usageLog'
 
-export const maxDuration = 120
+export const maxDuration = 180
 
 interface ThesisRow {
   id: string
