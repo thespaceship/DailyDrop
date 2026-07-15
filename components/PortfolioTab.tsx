@@ -14,6 +14,27 @@ interface PortfolioTabProps {
   token: string
 }
 
+interface Quote {
+  price: number | null
+  changePercent: number | null
+}
+
+function PriceBadge({ quote }: { quote?: Quote }) {
+  if (!quote || quote.price === null) return null
+  const positive = (quote.changePercent ?? 0) >= 0
+  return (
+    <span style={{ marginLeft: 8, fontSize: 12, fontWeight: 400 }} className="text-secondary">
+      ${quote.price.toFixed(2)}
+      {quote.changePercent !== null && (
+        <span style={{ color: positive ? '#16a34a' : '#dc2626', marginLeft: 4 }}>
+          {positive ? '+' : ''}
+          {quote.changePercent.toFixed(2)}%
+        </span>
+      )}
+    </span>
+  )
+}
+
 const SENTIMENT_LABEL: Record<WatchlistSentiment, string> = {
   attractive: 'Attractive',
   monitor: 'Monitor',
@@ -123,12 +144,40 @@ export default function PortfolioTab({ token }: PortfolioTabProps) {
   const [portfolio, setPortfolio] = useState<WatchlistItem[]>([])
   const [watchlist, setWatchlist] = useState<WatchlistItem[]>([])
   const [curated, setCurated] = useState<CuratedWatchlistItem[]>([])
+  const [prices, setPrices] = useState<Record<string, Quote>>({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
   useEffect(() => {
     loadAll()
   }, [])
+
+  const tickersKey = useMemo(() => {
+    const set = new Set<string>()
+    portfolio.forEach(i => set.add(i.ticker))
+    watchlist.forEach(i => set.add(i.ticker))
+    curated.forEach(i => set.add(i.ticker))
+    return Array.from(set).join(',')
+  }, [portfolio, watchlist, curated])
+
+  useEffect(() => {
+    if (!tickersKey) {
+      setPrices({})
+      return
+    }
+    let cancelled = false
+    fetch(`/api/prices?tickers=${encodeURIComponent(tickersKey)}`, {
+      headers: { 'x-drop-token': token },
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (!cancelled) setPrices(data.quotes || {})
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [tickersKey, token])
 
   async function loadAll() {
     setLoading(true)
@@ -233,6 +282,7 @@ export default function PortfolioTab({ token }: PortfolioTabProps) {
           showPercent
           onPercentChange={updatePercent}
           curatedByTicker={curatedByTicker}
+          prices={prices}
         />
 
         <ManualList
@@ -242,6 +292,7 @@ export default function PortfolioTab({ token }: PortfolioTabProps) {
           items={watchlist}
           onAdd={(ticker, note) => addItem('watchlist', ticker, note, null)}
           onRemove={id => removeItem('watchlist', id)}
+          prices={prices}
         />
       </div>
 
@@ -275,6 +326,7 @@ export default function PortfolioTab({ token }: PortfolioTabProps) {
                     {item.company_name && (
                       <span className="text-secondary"> — {item.company_name}</span>
                     )}
+                    <PriceBadge quote={prices[item.ticker]} />
                   </div>
                   <CuratedDetails item={item} />
                 </div>
@@ -304,6 +356,7 @@ interface ManualListProps {
   showPercent?: boolean
   onPercentChange?: (id: string, percent: number | null) => Promise<void>
   curatedByTicker?: Map<string, CuratedWatchlistItem>
+  prices?: Record<string, Quote>
 }
 
 function ManualList({
@@ -316,6 +369,7 @@ function ManualList({
   showPercent,
   onPercentChange,
   curatedByTicker,
+  prices,
 }: ManualListProps) {
   const [ticker, setTicker] = useState('')
   const [note, setNote] = useState('')
@@ -397,6 +451,7 @@ function ManualList({
                       {curatedMatch?.company_name && (
                         <span className="text-secondary"> — {curatedMatch.company_name}</span>
                       )}
+                      <PriceBadge quote={prices?.[item.ticker]} />
                     </div>
                     {item.note && <div className="item-sub">{item.note}</div>}
                   </div>

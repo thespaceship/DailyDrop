@@ -5,6 +5,7 @@ import { isValidOwnerToken, ownerFromRequest } from '@/lib/owner'
 import { normalizeTicker, parseJsonLoose } from '@/lib/textUtils'
 import { claudeCost } from '@/lib/pricing'
 import { logApiUsage } from '@/lib/usageLog'
+import { formatQuoteLine, getQuotes } from '@/lib/prices'
 import type { StockOutlook, WatchlistSentiment } from '@/lib/types'
 
 export const maxDuration = 180
@@ -111,18 +112,21 @@ export async function POST(req: NextRequest) {
     const dismissedTickers = new Set(existing.filter(e => e.dismissed).map(e => e.ticker))
     const activeExisting = existing.filter(e => !e.dismissed)
 
+    const quotes = await getQuotes(activeExisting.map(e => e.ticker))
     const currentListText = activeExisting.length
       ? activeExisting
           .map(e => {
             const outlookText = `outlook 1m/6m/12m: ${e.outlook_1m ?? 'none'}/${e.outlook_6m ?? 'none'}/${e.outlook_12m ?? 'none'}`
-            return `${e.ticker} (${e.company_name || 'unknown'}) — ${e.sentiment}: ${e.rationale} (${outlookText})`
+            const quote = quotes.get(e.ticker.toUpperCase())
+            const priceText = quote ? ` [${formatQuoteLine(quote)}]` : ''
+            return `${e.ticker} (${e.company_name || 'unknown'})${priceText} — ${e.sentiment}: ${e.rationale} (${outlookText})`
           })
           .join('\n')
       : 'Empty — no tickers tracked yet.'
 
     const prompt = `You extract a structured watchlist of stock tickers from investment analysis.
 
-CURRENT CURATED WATCHLIST:
+CURRENT CURATED WATCHLIST (price data, where shown, is live and delayed up to 15 minutes):
 ${currentListText}
 
 CURRENT INVESTMENT THESIS:
@@ -131,7 +135,7 @@ ${thesisRows[0]?.content || 'None yet.'}
 TODAY'S NEW INSIGHTS:
 ${insights}
 
-Produce an updated watchlist reflecting tickers with clear investment relevance mentioned across this context. For each ticker:
+Produce an updated watchlist reflecting tickers with clear investment relevance mentioned across this context. Use live price action, where available, to sharpen sentiment and outlook calls — e.g. a stock down sharply against a bullish narrative, or up sharply against deteriorating fundamentals, is worth flagging as a divergence. For each ticker:
 - Use the official stock ticker symbol (e.g. AAPL, not "Apple")
 - Assign a sentiment: exactly one of "attractive", "monitor", "reducing", "exit"
 - Give a one-sentence rationale specific to why it's on the list

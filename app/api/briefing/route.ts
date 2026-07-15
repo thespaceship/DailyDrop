@@ -10,6 +10,7 @@ import {
 import { ownerFromRequest } from '@/lib/owner'
 import { claudeCost } from '@/lib/pricing'
 import { logApiUsage } from '@/lib/usageLog'
+import { formatQuoteLine, getQuotes, type PriceQuote } from '@/lib/prices'
 
 export const maxDuration = 180
 
@@ -40,6 +41,10 @@ interface LibraryRow {
   summary: string | null
 }
 
+interface TickerRow {
+  ticker: string
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
@@ -63,20 +68,49 @@ export async function POST(req: NextRequest) {
     // each fetch degrades gracefully if unavailable.
     const owner = ownerFromRequest(req)
     const ownerFilter = owner ? `owner=eq.${encodeURIComponent(owner)}&` : 'owner=is.null&'
-    const [recentBriefings, thesisRows, libraryRows] = await Promise.all([
-      sbTrySelect<BriefingSummaryRow>(
-        'briefings',
-        `${ownerFilter}select=created_at,summary&order=created_at.desc&limit=3`
-      ),
-      sbTrySelect<ThesisRow>(
-        'investment_thesis',
-        `${ownerFilter}select=content&order=version.desc&limit=1`
-      ),
-      sbTrySelect<LibraryRow>(
-        'knowledge_library',
-        `${ownerFilter}select=title,summary&order=created_at.desc&limit=25`
-      ),
+    const [recentBriefings, thesisRows, libraryRows, portfolioRows, watchlistRows, curatedRows] =
+      await Promise.all([
+        sbTrySelect<BriefingSummaryRow>(
+          'briefings',
+          `${ownerFilter}select=created_at,summary&order=created_at.desc&limit=3`
+        ),
+        sbTrySelect<ThesisRow>(
+          'investment_thesis',
+          `${ownerFilter}select=content&order=version.desc&limit=1`
+        ),
+        sbTrySelect<LibraryRow>(
+          'knowledge_library',
+          `${ownerFilter}select=title,summary&order=created_at.desc&limit=25`
+        ),
+        sbTrySelect<TickerRow>(
+          'watchlist_items',
+          `${ownerFilter}list_type=eq.portfolio&select=ticker`
+        ),
+        sbTrySelect<TickerRow>(
+          'watchlist_items',
+          `${ownerFilter}list_type=eq.watchlist&select=ticker`
+        ),
+        sbTrySelect<TickerRow>(
+          'curated_watchlist',
+          `${ownerFilter}dismissed=eq.false&select=ticker`
+        ),
+      ])
+
+    // Live price context, best-effort — a market-data outage never blocks
+    // briefing generation, it just means this section reads "unavailable".
+    const quotes = await getQuotes([
+      ...portfolioRows.map(r => r.ticker),
+      ...watchlistRows.map(r => r.ticker),
+      ...curatedRows.map(r => r.ticker),
     ])
+
+    const marketData = [
+      formatTickerGroup('Portfolio holdings', portfolioRows, quotes),
+      formatTickerGroup('Watchlist', watchlistRows, quotes),
+      formatTickerGroup('AI-curated watchlist', curatedRows, quotes),
+    ]
+      .filter(Boolean)
+      .join('\n\n')
 
     const prompt = buildPrompt({
       persona,
@@ -87,6 +121,7 @@ export async function POST(req: NextRequest) {
       recentBriefings,
       thesis: thesisRows[0]?.content || '',
       library: libraryRows,
+      marketData,
     })
 
     const { text, usage } = await callClaude(prompt, LENGTH_MAX_TOKENS[length])
@@ -112,6 +147,15 @@ interface PromptInputs {
   recentBriefings: BriefingSummaryRow[]
   thesis: string
   library: LibraryRow[]
+  marketData: string
+}
+
+function formatTickerGroup(label: string, rows: TickerRow[], quotes: Map<string, PriceQuote>): string {
+  const lines = rows
+    .map(r => quotes.get(r.ticker.toUpperCase()))
+    .filter((q): q is PriceQuote => Boolean(q))
+    .map(formatQuoteLine)
+  return lines.length ? `${label}:\n${lines.join('\n')}` : ''
 }
 
 function buildPrompt(input: PromptInputs): string {
@@ -166,6 +210,9 @@ ${previousContext || 'None available — this may be the first briefing.'}
 
 CURRENT INVESTMENT THESIS:
 ${input.thesis || 'No thesis established yet.'}
+
+LIVE MARKET DATA (delayed up to 15 minutes; use to ground sentiment and recommendations in actual price action, not just narrative):
+${input.marketData || 'No tracked tickers with live pricing available.'}
 
 KNOWLEDGE BASE:
 ${librarySection || 'Empty.'}

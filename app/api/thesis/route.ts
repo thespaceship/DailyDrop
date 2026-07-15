@@ -4,6 +4,7 @@ import { sbInsert, sbTrySelect } from '@/lib/supabase'
 import { isValidOwnerToken, ownerFromRequest } from '@/lib/owner'
 import { claudeCost } from '@/lib/pricing'
 import { logApiUsage } from '@/lib/usageLog'
+import { getQuotes } from '@/lib/prices'
 
 export const maxDuration = 180
 
@@ -88,18 +89,26 @@ export async function POST(req: NextRequest) {
     )
     let portfolioNote = ''
     if (portfolioRows.length > 0) {
+      const quotes = await getQuotes(portfolioRows.map(r => r.ticker))
       const weighted = portfolioRows.filter(r => r.percent_of_portfolio !== null)
       const holdingsText = portfolioRows
-        .map(r =>
-          r.percent_of_portfolio !== null ? `${r.ticker} (${r.percent_of_portfolio}%)` : r.ticker
-        )
+        .map(r => {
+          const weightText =
+            r.percent_of_portfolio !== null ? `${r.ticker} (${r.percent_of_portfolio}%)` : r.ticker
+          const quote = quotes.get(r.ticker.toUpperCase())
+          if (!quote || quote.price === null) return weightText
+          const sign = quote.changePercent !== null && quote.changePercent >= 0 ? '+' : ''
+          const changeText =
+            quote.changePercent !== null ? ` (${sign}${quote.changePercent.toFixed(2)}% today)` : ''
+          return `${weightText} — $${quote.price.toFixed(2)}${changeText}`
+        })
         .join(', ')
       const allocated = weighted.reduce((sum, r) => sum + (r.percent_of_portfolio ?? 0), 0)
       const unspecifiedNote =
         weighted.length > 0 && allocated < 100
           ? ` ${(100 - allocated).toFixed(1)}% of the portfolio is unweighted or held in positions not listed here.`
           : ''
-      portfolioNote = `\n\nUSER'S CURRENT PORTFOLIO HOLDINGS: ${holdingsText}.${unspecifiedNote} Use this weighting to inform which positions carry more or less significance in the thesis — a heavily weighted holding deserves more scrutiny than a small one.`
+      portfolioNote = `\n\nUSER'S CURRENT PORTFOLIO HOLDINGS (with live price/change where available, delayed up to 15 minutes): ${holdingsText}.${unspecifiedNote} Use this weighting and price action to inform which positions carry more or less significance in the thesis — a heavily weighted holding deserves more scrutiny than a small one, and a sharp recent move is worth noting explicitly.`
     }
 
     const today = new Date().toLocaleDateString('en-US', {
