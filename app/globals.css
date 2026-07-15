@@ -48,28 +48,25 @@ body {
   overscroll-behavior: none;
 }
 
-/* The app shell is always exactly one viewport tall, whether or not the
-   active tab's content is long enough to need scrolling — only `.content`
-   (below) scrolls internally. This was deliberate: letting the *document*
-   itself scroll only when a tab's content happened to be tall enough (the
-   previous approach) meant the layout behaved differently tab-to-tab —
-   e.g. a gap appeared below the tab bar specifically on the short Home tab
-   but not on the longer Thesis tab. iOS/WKWebView's safe-area and height
-   accounting isn't consistent between a scrollable and a non-scrollable
-   page, so the fix is to never let that distinction exist: the shell's
-   scrollability is now fixed regardless of tab content.
+/* The document scrolls normally, sized with plain CSS `dvh` — no JS-measured
+   height. That was tried (three different ways) and each one made things
+   worse: on this app's actual target device, window.innerHeight /
+   visualViewport.height reports a shorter-than-real value in standalone
+   (home-screen) mode, not just on cold launch — so any shell built to that
+   exact JS-measured pixel height ends up short, leaving a gap of bare
+   background below the tab bar. Plain `dvh` doesn't have that problem: it's
+   never smaller than the true content can require, since `min-height` (not
+   `height`) lets the document grow taller than the viewport for tabs with
+   enough content, and never clips anything.
 
-   Height comes from `--app-height`, which useViewportHeight() keeps pinned
-   to the real window.innerHeight, re-measured repeatedly after mount (a
-   true cold launch can report a taller-than-real height on first paint
-   before iOS finishes settling). Plain `100dvh` is only the pre-JS
-   fallback. */
+   The header and tab bar use `position: sticky` instead of `position:
+   fixed` — sticky participates in normal document flow, so iOS never has
+   to "re-anchor" it against a resizing viewport, which is what caused it
+   to visually float away from the bottom mid-scroll on some devices. */
 body {
   display: flex;
   flex-direction: column;
-  height: 100dvh;
-  height: var(--app-height, 100dvh);
-  overflow: hidden;
+  min-height: 100dvh;
 }
 
 a {
@@ -84,18 +81,13 @@ a {
   margin: 0 auto;
   width: 100%;
   flex: 1;
-  min-height: 0;
   display: flex;
   flex-direction: column;
   background: var(--bg-primary);
-  overflow: hidden;
 }
 
 .content {
   flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
   padding: 16px 16px 24px;
   display: flex;
   flex-direction: column;
@@ -105,6 +97,8 @@ a {
 /* ---------- Header ---------- */
 
 .header {
+  position: sticky;
+  top: 0;
   flex-shrink: 0;
   z-index: 20;
   background: rgba(8, 8, 8, 0.92);
@@ -204,6 +198,8 @@ a {
 /* ---------- Bottom tab bar ---------- */
 
 .tabbar {
+  position: sticky;
+  bottom: 0;
   flex-shrink: 0;
   width: 100%;
   z-index: 20;
