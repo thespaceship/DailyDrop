@@ -54,11 +54,18 @@ body {
    page scrolls, and `position: fixed` bars can visually detach from the
    viewport during that resize (worse on some iOS versions/devices than
    others). Keeping the document height fixed and delegating scrolling to an
-   inner container sidesteps the bug entirely instead of fighting it. */
+   inner container sidesteps the bug entirely instead of fighting it.
+
+   Height comes from `--app-height`, a variable useViewportHeight() keeps
+   pinned to window.visualViewport's real height. Plain `100dvh` is the
+   fallback for the brief moment before that JS runs — iOS Safari doesn't
+   reliably recompute `dvh` when its toolbar shows/hides, which left a gap
+   of bare background below the tab bar once the toolbar collapsed. */
 body {
   display: flex;
   flex-direction: column;
   height: 100dvh;
+  height: var(--app-height, 100dvh);
   overflow: hidden;
 }
 

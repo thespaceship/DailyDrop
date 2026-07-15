@@ -10,6 +10,7 @@ import LibraryTab from './LibraryTab'
 import PortfolioTab from './PortfolioTab'
 import SettingsTab from './SettingsTab'
 import { DEFAULT_PERSONA, DEFAULT_VOICE_ID } from '@/lib/constants'
+import { useViewportHeight } from '@/lib/useViewportHeight'
 import type { UserSettings } from '@/lib/types'
 
 const SETTINGS_KEY = 'dailydrop_settings'
@@ -28,6 +29,8 @@ interface DashboardProps {
 export default function Dashboard({ token }: DashboardProps) {
   const [tab, setTab] = useState<TabId>('home')
   const [settings, setSettings] = useState<UserSettings>(DEFAULT_SETTINGS)
+
+  useViewportHeight()
 
   useEffect(() => {
     try {
