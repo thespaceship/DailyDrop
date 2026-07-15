@@ -48,19 +48,23 @@ body {
   overscroll-behavior: none;
 }
 
-/* The document scrolls normally (no fixed-height shell, no manual viewport
-   measuring — both were tried here and both broke on real devices: one
-   left the tab bar floating mid-scroll on an iPhone 16e, the other left a
-   gap below it in standalone/home-screen mode on an iPhone 15 Pro, because
-   iOS's `dvh`/visualViewport reporting isn't consistent enough to build a
-   pixel-exact shell on top of). The header and tab bar use `position:
-   sticky` instead of `position: fixed` — sticky participates in normal
-   document flow, so iOS never has to "re-anchor" it against a resizing
-   viewport, which is what was causing both bugs. */
+/* The document scrolls normally — no fixed-height shell. The header and tab
+   bar use `position: sticky` instead of `position: fixed` — sticky
+   participates in normal document flow, so iOS never has to "re-anchor" it
+   against a resizing viewport, which was causing it to visually float away
+   from the bottom mid-scroll.
+
+   Height comes from `--app-height`, which useViewportHeight() keeps pinned
+   to the real window.innerHeight, re-measured repeatedly right after a cold
+   launch. Plain `100dvh` is only the pre-JS fallback: on a true cold launch
+   (not just resuming), iOS can report a taller-than-real height on first
+   paint before it finishes settling, leaving a gap of background below the
+   tab bar until something else forces a layout recalculation. */
 body {
   display: flex;
   flex-direction: column;
   min-height: 100dvh;
+  min-height: var(--app-height, 100dvh);
 }
 
 a {

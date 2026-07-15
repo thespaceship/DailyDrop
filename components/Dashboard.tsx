@@ -10,6 +10,7 @@ import LibraryTab from './LibraryTab'
 import PortfolioTab from './PortfolioTab'
 import SettingsTab from './SettingsTab'
 import { DEFAULT_PERSONA, DEFAULT_VOICE_ID } from '@/lib/constants'
+import { useViewportHeight } from '@/lib/useViewportHeight'
 import type { UserSettings } from '@/lib/types'
 
 const SETTINGS_KEY = 'dailydrop_settings'
@@ -29,6 +30,8 @@ export default function Dashboard({ token }: DashboardProps) {
   const [tab, setTab] = useState<TabId>('home')
   const [settings, setSettings] = useState<UserSettings>(DEFAULT_SETTINGS)
 
+  useViewportHeight()
+
   useEffect(() => {
     try {
       const saved = localStorage.getItem(SETTINGS_KEY)
@@ -44,18 +47,6 @@ export default function Dashboard({ token }: DashboardProps) {
     } catch {
       // Corrupt settings — fall back to defaults.
     }
-  }, [])
-
-  useEffect(() => {
-    // iOS Safari sometimes renders `position: sticky` elements (the header,
-    // the tab bar) in the wrong spot on first paint and only recomputes
-    // once something forces a reflow — e.g. switching tabs. Nudging the
-    // scroll position by 1px and back forces that recalculation up front so
-    // the bars are correctly placed before the user does anything.
-    requestAnimationFrame(() => {
-      window.scrollTo(0, 1)
-      requestAnimationFrame(() => window.scrollTo(0, 0))
-    })
   }, [])
 
   function saveSettings(next: UserSettings) {
