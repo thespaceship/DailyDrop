@@ -46,6 +46,18 @@ export default function Dashboard({ token }: DashboardProps) {
     }
   }, [])
 
+  useEffect(() => {
+    // iOS Safari sometimes renders `position: sticky` elements (the header,
+    // the tab bar) in the wrong spot on first paint and only recomputes
+    // once something forces a reflow — e.g. switching tabs. Nudging the
+    // scroll position by 1px and back forces that recalculation up front so
+    // the bars are correctly placed before the user does anything.
+    requestAnimationFrame(() => {
+      window.scrollTo(0, 1)
+      requestAnimationFrame(() => window.scrollTo(0, 0))
+    })
+  }, [])
+
   function saveSettings(next: UserSettings) {
     setSettings(next)
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(next))
