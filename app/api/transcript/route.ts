@@ -1,9 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { fetchWithRetry } from '@/lib/retry'
+import { extractVideoId } from '@/lib/youtube'
+import { ownerFromRequest } from '@/lib/owner'
+import { sbTrySelect } from '@/lib/supabase'
 
 export const maxDuration = 60
 
 const MAX_TRANSCRIPT_CHARS = 8000
+// How far back to look when checking whether a video has already been used
+// in a previous briefing — a soft, informational check only.
+const DUPLICATE_LOOKBACK = 40
+
+interface BriefingSourcesRow {
+  created_at: string
+  video_urls: string[] | null
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -16,6 +27,21 @@ export async function POST(req: NextRequest) {
     const videoId = extractVideoId(url)
     if (!videoId) {
       return NextResponse.json({ error: 'Could not parse YouTube URL' }, { status: 400 })
+    }
+
+    let alreadyUsed = false
+    let lastUsedAt: string | null = null
+    const owner = ownerFromRequest(req)
+    if (owner) {
+      const recentBriefings = await sbTrySelect<BriefingSourcesRow>(
+        'briefings',
+        `owner=eq.${encodeURIComponent(owner)}&select=created_at,video_urls&order=created_at.desc&limit=${DUPLICATE_LOOKBACK}`
+      )
+      const match = recentBriefings.find(b => (b.video_urls || []).some(u => extractVideoId(u) === videoId))
+      if (match) {
+        alreadyUsed = true
+        lastUsedAt = match.created_at
+      }
     }
 
     const res = await fetchWithRetry(
@@ -42,25 +68,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       transcript: text.slice(0, MAX_TRANSCRIPT_CHARS),
       videoId,
+      alreadyUsed,
+      lastUsedAt,
     })
   } catch (err) {
     console.error('Transcript error:', err)
     const message = err instanceof Error ? err.message : 'Transcription failed'
     return NextResponse.json({ transcript: null, error: message })
   }
-}
-
-function extractVideoId(url: string): string | null {
-  const patterns = [
-    /(?:youtube\.com\/watch\?v=)([^&\n?#]+)/,
-    /(?:youtu\.be\/)([^&\n?#]+)/,
-    /(?:youtube\.com\/embed\/)([^&\n?#]+)/,
-    /(?:youtube\.com\/shorts\/)([^&\n?#]+)/,
-    /(?:youtube\.com\/live\/)([^&\n?#]+)/,
-  ]
-  for (const pattern of patterns) {
-    const match = url.match(pattern)
-    if (match) return match[1]
-  }
-  return null
 }

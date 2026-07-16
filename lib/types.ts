@@ -3,6 +3,8 @@ export interface VideoItem {
   transcript: string | null
   status: 'loading' | 'ready' | 'error'
   errorMsg?: string
+  alreadyUsed?: boolean
+  lastUsedAt?: string | null
 }
 
 export interface EmailItem {

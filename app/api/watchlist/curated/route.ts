@@ -6,6 +6,7 @@ import { normalizeTicker, parseJsonLoose } from '@/lib/textUtils'
 import { claudeCost } from '@/lib/pricing'
 import { logApiUsage } from '@/lib/usageLog'
 import { formatQuoteLine, getQuotes } from '@/lib/prices'
+import { extractVideoId } from '@/lib/youtube'
 import type { StockOutlook, WatchlistSentiment } from '@/lib/types'
 
 export const maxDuration = 180
@@ -80,6 +81,11 @@ interface ThesisRow {
   content: string
 }
 
+interface BriefingSourcesRow {
+  created_at: string
+  video_urls: string[] | null
+}
+
 /**
  * Called after each briefing (alongside the thesis update) to extract a
  * structured, evolving list of tickers the AI has flagged as noteworthy.
@@ -93,9 +99,35 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid access token' }, { status: 401 })
     }
 
-    const { insights } = await req.json()
+    const { insights, videoUrls } = await req.json()
     if (!insights || typeof insights !== 'string') {
       return NextResponse.json({ error: 'No insights provided' }, { status: 400 })
+    }
+
+    // Same repeated-source guard as the thesis update: don't let a
+    // re-submitted video get read as a second independent signal that
+    // should push a ticker's sentiment or outlook further.
+    let repeatedSourcesNote = ''
+    if (Array.isArray(videoUrls) && videoUrls.length > 0) {
+      const recentBriefings = await sbTrySelect<BriefingSourcesRow>(
+        'briefings',
+        `owner=eq.${encodeURIComponent(owner)}&select=created_at,video_urls&order=created_at.desc&limit=30`
+      )
+      const priorVideoIds = new Set(
+        recentBriefings
+          .slice(1)
+          .flatMap(b => b.video_urls || [])
+          .map(u => extractVideoId(u))
+          .filter((id): id is string => Boolean(id))
+      )
+      const repeats = videoUrls.filter((u: unknown) => {
+        if (typeof u !== 'string') return false
+        const id = extractVideoId(u)
+        return id ? priorVideoIds.has(id) : false
+      })
+      if (repeats.length > 0) {
+        repeatedSourcesNote = `\n\nNOTE — REPEATED SOURCE MATERIAL: The following video(s) in today's insights were already covered in a previous briefing: ${repeats.join(', ')}. Treat this as the same evidence seen again, not a second independent signal — do not shift a ticker's sentiment or outlook further in the same direction on the strength of a repeated video alone.`
+      }
     }
 
     const [existing, thesisRows] = await Promise.all([
@@ -133,7 +165,7 @@ CURRENT INVESTMENT THESIS:
 ${thesisRows[0]?.content || 'None yet.'}
 
 TODAY'S NEW INSIGHTS:
-${insights}
+${insights}${repeatedSourcesNote}
 
 Produce an updated watchlist reflecting tickers with clear investment relevance mentioned across this context. Use live price action, where available, to sharpen sentiment and outlook calls — e.g. a stock down sharply against a bullish narrative, or up sharply against deteriorating fundamentals, is worth flagging as a divergence. For each ticker:
 - Use the official stock ticker symbol (e.g. AAPL, not "Apple")

@@ -269,7 +269,7 @@ export default function HomeTab({ token, settings }: HomeTabProps) {
     try {
       const res = await fetch('/api/transcript', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'x-drop-token': token },
         body: JSON.stringify({ url }),
       })
       const data = await res.json()
@@ -281,6 +281,8 @@ export default function HomeTab({ token, settings }: HomeTabProps) {
                 transcript: data.transcript || null,
                 status: data.transcript ? 'ready' : 'error',
                 errorMsg: data.error,
+                alreadyUsed: Boolean(data.alreadyUsed),
+                lastUsedAt: data.lastUsedAt || null,
               }
             : v
         )
@@ -432,7 +434,7 @@ export default function HomeTab({ token, settings }: HomeTabProps) {
         const watchlistRes = await fetch('/api/watchlist/curated', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'x-drop-token': token },
-          body: JSON.stringify({ insights: summary || script }),
+          body: JSON.stringify({ insights: summary || script, videoUrls: videos.map(v => v.url) }),
         })
         const watchlistData = await watchlistRes.json().catch(() => ({}))
         if (watchlistRes.ok && typeof watchlistData.cost === 'number') {
@@ -497,9 +499,22 @@ export default function HomeTab({ token, settings }: HomeTabProps) {
                     <span className="dot dot-loading" /> Fetching transcript
                   </>
                 )}
-                {v.status === 'ready' && (
+                {v.status === 'ready' && !v.alreadyUsed && (
                   <>
                     <span className="dot dot-success" /> Transcript ready
+                  </>
+                )}
+                {v.status === 'ready' && v.alreadyUsed && (
+                  <>
+                    <span className="dot dot-warning" />
+                    Already used
+                    {v.lastUsedAt
+                      ? ` in a briefing on ${new Date(v.lastUsedAt).toLocaleDateString('en-US', {
+                          month: 'short',
+                          day: 'numeric',
+                        })}`
+                      : ' in a previous briefing'}
+                    {' — including it again won\'t add new weight to your thesis'}
                   </>
                 )}
                 {v.status === 'error' && (

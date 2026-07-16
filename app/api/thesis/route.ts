@@ -5,6 +5,7 @@ import { isValidOwnerToken, ownerFromRequest } from '@/lib/owner'
 import { claudeCost } from '@/lib/pricing'
 import { logApiUsage } from '@/lib/usageLog'
 import { getQuotes } from '@/lib/prices'
+import { extractVideoId } from '@/lib/youtube'
 
 export const maxDuration = 180
 
@@ -23,6 +24,10 @@ interface BriefingSourcesRow {
 interface PortfolioRow {
   ticker: string
   percent_of_portfolio: number | null
+}
+
+interface ThesisSettingsRow {
+  custom_prompt: string | null
 }
 
 export async function GET(req: NextRequest) {
@@ -72,16 +77,35 @@ export async function POST(req: NextRequest) {
     if (Array.isArray(videoUrls) && videoUrls.length > 0) {
       const recentBriefings = await sbTrySelect<BriefingSourcesRow>(
         'briefings',
-        `owner=eq.${encodeURIComponent(owner)}&select=created_at,video_urls&order=created_at.desc&limit=8`
+        `owner=eq.${encodeURIComponent(owner)}&select=created_at,video_urls&order=created_at.desc&limit=30`
       )
-      const priorUrls = new Set(
-        recentBriefings.slice(1).flatMap(b => b.video_urls || [])
+      // Match by video ID, not raw URL string, so youtu.be/X and
+      // youtube.com/watch?v=X are recognized as the same video.
+      const priorVideoIds = new Set(
+        recentBriefings
+          .slice(1)
+          .flatMap(b => b.video_urls || [])
+          .map(u => extractVideoId(u))
+          .filter((id): id is string => Boolean(id))
       )
-      const repeats = videoUrls.filter((u: unknown) => typeof u === 'string' && priorUrls.has(u))
+      const repeats = videoUrls.filter((u: unknown) => {
+        if (typeof u !== 'string') return false
+        const id = extractVideoId(u)
+        return id ? priorVideoIds.has(id) : false
+      })
       if (repeats.length > 0) {
-        repeatedSourcesNote = `\n\nNOTE — REPEATED SOURCE MATERIAL: The following video(s) in today's insights were already covered in a previous briefing: ${repeats.join(', ')}. If today's insights are substantially restating that same source rather than presenting genuinely new information, treat it as the same piece of evidence seen again — not as new corroboration — and do not increase conviction on the strength of it alone.`
+        repeatedSourcesNote = `\n\nNOTE — REPEATED SOURCE MATERIAL: The following video(s) in today's insights were already covered in a previous briefing: ${repeats.join(', ')}. Treat this as the same piece of evidence seen again, not as new corroboration — do not increase conviction, add weight to a position, or count it as a second independent signal on the strength of a repeated video alone.`
       }
     }
+
+    const settingsRows = await sbTrySelect<ThesisSettingsRow>(
+      'thesis_settings',
+      `owner=eq.${encodeURIComponent(owner)}&select=custom_prompt&limit=1`
+    )
+    const customPrompt = settingsRows[0]?.custom_prompt?.trim() || ''
+    const customPromptSection = customPrompt
+      ? `\n\nUSER'S CUSTOM INSTRUCTIONS FOR THIS THESIS (the user set these themselves — follow them when deciding what to emphasize, how to frame the analysis, or what to prioritize, in addition to the rules below):\n${customPrompt}`
+      : ''
 
     const portfolioRows = await sbTrySelect<PortfolioRow>(
       'watchlist_items',
@@ -123,13 +147,13 @@ export async function POST(req: NextRequest) {
 TODAY'S ACTUAL DATE: ${today}
 
 CURRENT THESIS (from previous analysis):
-${current?.content || 'No thesis exists yet. Create the first version from today\'s insights.'}
+${current?.content || 'No thesis exists yet. Create the first version from today\'s insights.'}${customPromptSection}
 
 TODAY'S NEW INSIGHTS:
 ${insights}${repeatedSourcesNote}${portfolioNote}
 
 Update the investment thesis by integrating today's insights. The thesis should:
-- Build on and refine previous positions, not replace them
+${customPrompt ? '- Honor the user\'s custom instructions above as a standing directive for how this thesis should be written\n' : ''}- Build on and refine previous positions, not replace them
 - Note where conviction has increased or decreased
 - Track emerging themes across multiple days
 - If today's insights substantially restate content already reflected in the
