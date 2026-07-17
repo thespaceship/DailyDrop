@@ -6,6 +6,7 @@ import { claudeCost } from '@/lib/pricing'
 import { logApiUsage } from '@/lib/usageLog'
 import { getQuotes } from '@/lib/prices'
 import { extractVideoId } from '@/lib/youtube'
+import { DEFAULT_THESIS_PROMPT } from '@/lib/constants'
 
 export const maxDuration = 180
 
@@ -102,10 +103,7 @@ export async function POST(req: NextRequest) {
       'thesis_settings',
       `owner=eq.${encodeURIComponent(owner)}&select=custom_prompt&limit=1`
     )
-    const customPrompt = settingsRows[0]?.custom_prompt?.trim() || ''
-    const customPromptSection = customPrompt
-      ? `\n\nUSER'S CUSTOM INSTRUCTIONS FOR THIS THESIS (the user set these themselves — follow them when deciding what to emphasize, how to frame the analysis, or what to prioritize, in addition to the rules below):\n${customPrompt}`
-      : ''
+    const thesisInstructions = settingsRows[0]?.custom_prompt?.trim() || DEFAULT_THESIS_PROMPT
 
     const portfolioRows = await sbTrySelect<PortfolioRow>(
       'watchlist_items',
@@ -147,22 +145,19 @@ export async function POST(req: NextRequest) {
 TODAY'S ACTUAL DATE: ${today}
 
 CURRENT THESIS (from previous analysis):
-${current?.content || 'No thesis exists yet. Create the first version from today\'s insights.'}${customPromptSection}
+${current?.content || 'No thesis exists yet. Create the first version from today\'s insights.'}
 
 TODAY'S NEW INSIGHTS:
 ${insights}${repeatedSourcesNote}${portfolioNote}
 
 Update the investment thesis by integrating today's insights. The thesis should:
-${customPrompt ? '- Honor the user\'s custom instructions above as a standing directive for how this thesis should be written\n' : ''}- Build on and refine previous positions, not replace them
-- Note where conviction has increased or decreased
-- Track emerging themes across multiple days
+${thesisInstructions}
+
+These rules always apply, in addition to the above:
 - If today's insights substantially restate content already reflected in the
   current thesis (e.g. the same source was accidentally submitted twice),
   treat it as the same evidence seen again, not as new corroboration — do
   not increase conviction or repeat a point based on duplicated input alone
-- Maintain a clear current market outlook
-- Include specific sector and asset class views
-- Be written as a professional investment memo, not a list
 - Stay within roughly 800-1000 words. This is a hard target, not a suggestion:
   actively consolidate or retire positions that are no longer relevant, merge
   overlapping points, and tighten language rather than letting the document

@@ -5,6 +5,7 @@ import { TrendingUp, Headphones, AlertTriangle, Sliders, Check } from 'lucide-re
 import ScriptView from './ScriptView'
 import AudioPlayer from './AudioPlayer'
 import { ttsCost, formatCost } from '@/lib/pricing'
+import { DEFAULT_THESIS_PROMPT } from '@/lib/constants'
 import type { Thesis, UserSettings } from '@/lib/types'
 
 interface ThesisTabProps {
@@ -43,8 +44,8 @@ export default function ThesisTab({ token, settings }: ThesisTabProps) {
 
     fetch('/api/thesis/prompt', { headers: { 'x-drop-token': token } })
       .then(res => res.json())
-      .then(data => setCustomPrompt(data.customPrompt || ''))
-      .catch(() => {})
+      .then(data => setCustomPrompt(data.customPrompt || DEFAULT_THESIS_PROMPT))
+      .catch(() => setCustomPrompt(DEFAULT_THESIS_PROMPT))
       .finally(() => setPromptLoading(false))
   }, [token])
 
@@ -101,9 +102,26 @@ export default function ThesisTab({ token, settings }: ThesisTabProps) {
           </span>
         </div>
         <p className="hint" style={{ marginBottom: 12 }}>
-          Add standing instructions for how your thesis should be written — what to emphasize, how
-          to weigh risk, a framework to apply. These are used every time the thesis is updated,
-          starting with your next DailyDrop generation.
+          This is the instruction set guiding how your thesis gets written — what to emphasize, how
+          to weigh conviction, how to frame the analysis. Edit it as you see fit and save; it's used
+          every time the thesis is updated, starting with your next DailyDrop generation.{' '}
+          <button
+            type="button"
+            onClick={() => {
+              setCustomPrompt(DEFAULT_THESIS_PROMPT)
+              setPromptSaved(false)
+            }}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: 'var(--accent)',
+              cursor: 'pointer',
+              fontSize: 12,
+              padding: 0,
+            }}
+          >
+            Reset to default
+          </button>
         </p>
         {promptLoading ? (
           <div className="status-row">
@@ -118,8 +136,7 @@ export default function ThesisTab({ token, settings }: ThesisTabProps) {
                   setCustomPrompt(e.target.value.slice(0, MAX_CUSTOM_PROMPT_CHARS))
                   setPromptSaved(false)
                 }}
-                rows={4}
-                placeholder="e.g. Weight downside risk more heavily than upside. Flag anything that contradicts my current portfolio positioning explicitly."
+                rows={7}
               />
               <p className="hint">{customPrompt.length}/{MAX_CUSTOM_PROMPT_CHARS}</p>
             </div>

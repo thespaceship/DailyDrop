@@ -28,6 +28,14 @@ export const DEFAULT_PERSONA =
   'Identify trends, risks, and opportunities. ' +
   'Speak with calm authority and get directly to the insights.'
 
+/** The editable portion of the thesis-update instructions — shown to and adjustable by the user in the Thesis tab. */
+export const DEFAULT_THESIS_PROMPT = `- Build on and refine previous positions, not replace them
+- Note where conviction has increased or decreased
+- Track emerging themes across multiple days
+- Maintain a clear current market outlook
+- Include specific sector and asset class views
+- Be written as a professional investment memo, not a list`
+
 export type BriefingLength = 'short' | 'medium' | 'long'
 
 export const LENGTH_TARGETS: Record<BriefingLength, string> = {
