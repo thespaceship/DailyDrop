@@ -259,6 +259,23 @@ export default function PortfolioTab({ token }: PortfolioTabProps) {
     [curated]
   )
 
+  // A stock you already track manually (portfolio or watchlist) shouldn't also
+  // appear as a standalone card in the Curated Watchlist section — the AI's take
+  // on it is already surfaced inline under your holding via curatedByTicker.
+  // Filter it out of the section here while leaving `curated` itself intact, so
+  // that inline enrichment still has its data.
+  const manualTickers = useMemo(() => {
+    const set = new Set<string>()
+    portfolio.forEach(i => set.add(i.ticker))
+    watchlist.forEach(i => set.add(i.ticker))
+    return set
+  }, [portfolio, watchlist])
+
+  const visibleCurated = useMemo(
+    () => curated.filter(item => !manualTickers.has(item.ticker)),
+    [curated, manualTickers]
+  )
+
   if (loading) {
     return (
       <div className="status-row" style={{ padding: '0 4px' }}>
@@ -292,6 +309,7 @@ export default function PortfolioTab({ token }: PortfolioTabProps) {
           items={watchlist}
           onAdd={(ticker, note) => addItem('watchlist', ticker, note, null)}
           onRemove={id => removeItem('watchlist', id)}
+          curatedByTicker={curatedByTicker}
           prices={prices}
         />
       </div>
@@ -302,19 +320,19 @@ export default function PortfolioTab({ token }: PortfolioTabProps) {
             <Sparkles size={15} />
             Curated Watchlist
           </span>
-          {curated.length > 0 && <span className="badge">{curated.length}</span>}
+          {visibleCurated.length > 0 && <span className="badge">{visibleCurated.length}</span>}
         </div>
         <p className="hint" style={{ marginBottom: 12 }}>
           Builds automatically from tickers your briefings and thesis flag as noteworthy. Dismiss
           any entry you don&apos;t want tracked — it won&apos;t reappear.
         </p>
-        {curated.length === 0 ? (
+        {visibleCurated.length === 0 ? (
           <p className="empty-text">
             No entries yet — this fills in as briefings mention specific stocks worth watching.
           </p>
         ) : (
           <div className="portfolio-curated-list">
-            {curated.map(item => (
+            {visibleCurated.map(item => (
               <div
                 key={item.id}
                 className="item-row portfolio-curated-item"
